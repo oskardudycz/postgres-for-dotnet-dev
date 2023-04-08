@@ -1,5 +1,6 @@
 ﻿using System.Drawing;
 using System.Linq.Expressions;
+using System.Reflection;
 using System.Text;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
@@ -16,8 +17,10 @@ public static class PongoExpressionExtensions
         if (filter is NearFilterOperator nearFilter)
         {
             var locationColumnName = nearFilter.PropertyName;
-            return $"ST_DWithin({locationColumnName}, ST_SetSRID(ST_MakePoint(@Longitude, @Latitude), 4326), @Distance)";
+            return
+                $"ST_DWithin({locationColumnName}, ST_SetSRID(ST_MakePoint(@Longitude, @Latitude), 4326), @Distance)";
         }
+
         // Use a BsonDocument to access MongoDB filter elements
         var bsonFilter = filter.Render(BsonSerializer.SerializerRegistry.GetSerializer<T>(),
             BsonSerializer.SerializerRegistry);
@@ -49,7 +52,8 @@ public static class PongoExpressionExtensions
 
     public static string FilterConditionsToSqlExpression<T>(List<FilterCondition<T>> conditions, string tableName)
     {
-        var filterExpressions = conditions.Select(condition => FilterConditionToSqlExpression(condition.Predicate, tableName)).ToList();
+        var filterExpressions = conditions
+            .Select(condition => FilterConditionToSqlExpression(condition.Predicate, tableName)).ToList();
         var sqlExpression = string.Join(" AND ", filterExpressions);
         return sqlExpression;
     }
@@ -272,7 +276,7 @@ public static class PongoExpressionExtensions
     }
 }
 
-public class SqlExpression : Expression
+public class SqlExpression: Expression
 {
     public string Sql { get; }
 
@@ -289,20 +293,46 @@ public class SqlExpression : Expression
     public override string ToString() => Sql;
 }
 
-
-public class CustomExpressionVisitor : ExpressionVisitor
+public class CustomExpressionVisitor: ExpressionVisitor
 {
-    private readonly string _tableName;
+    private readonly string tableName;
 
     public CustomExpressionVisitor(string tableName)
     {
-        _tableName = tableName;
+        this.tableName = tableName;
     }
 
     protected override Expression VisitBinary(BinaryExpression node)
     {
-        var left = (SqlExpression)Visit(node.Left);
-        var right = (SqlExpression)Visit(node.Right);
+        object? left;
+        switch (node.Left)
+        {
+            case MemberExpression:
+            case MethodCallExpression:
+                left = Visit(node.Left);
+                break;
+            case ConstantExpression constantLeft:
+                left = constantLeft.Value;
+                break;
+            default:
+                left = Expression.Lambda(node.Left).Compile().DynamicInvoke()!;
+                break;
+        }
+
+        object? right;
+        switch (node.Right)
+        {
+            case MemberExpression:
+            case MethodCallExpression:
+                right = Visit(node.Right);
+                break;
+            case ConstantExpression constantRight:
+                right = constantRight.Value;
+                break;
+            default:
+                right = Expression.Lambda(node.Right).Compile().DynamicInvoke()!;
+                break;
+        }
 
         var op = node.NodeType switch
         {
@@ -315,12 +345,17 @@ public class CustomExpressionVisitor : ExpressionVisitor
             _ => throw new NotSupportedException($"The binary operator '{node.NodeType}' is not supported")
         };
 
-        return new SqlExpression($"{left.Sql} {op} {right.Sql}", typeof(bool));
+
+        // Build the SQL expression
+        string leftSql = left is SqlExpression expression1 ? expression1.Sql : FormatConstant(left);
+        string rightSql = right is SqlExpression expression ? expression.Sql : FormatConstant(right);
+        string sqlExpression = $"{leftSql} {op} {rightSql}";
+        return new SqlExpression(sqlExpression, typeof(bool));
     }
 
     protected override Expression VisitMember(MemberExpression node)
     {
-        return new SqlExpression($"{_tableName}.{node.Member.Name}");
+        return new SqlExpression($"'{tableName}.{node.Member.Name}'");
     }
 
     protected override Expression VisitConstant(ConstantExpression node)
@@ -333,7 +368,12 @@ public class CustomExpressionVisitor : ExpressionVisitor
         return value switch
         {
             null => "NULL",
-            string or DateTime or DateTimeOffset => $"'{value}'",
+            string => $"'{value}'",
+            TimeSpan => $"'{value:G}'",
+            DateTime date => $"'{date.ToString("yyyy-MM-ddTHH:mm:ss'Z'")}'",
+            DateTimeOffset date => date.Offset == TimeSpan.Zero
+                ? $"'{date.ToString("yyyy-MM-ddTHH:mm:ss'Z'")}'"
+                : $"'{date.ToString("yyyy-MM-ddTHH:mm:sszzz")}'",
             _ => value.ToString()!
         };
     }
@@ -343,5 +383,82 @@ public class CustomExpressionVisitor : ExpressionVisitor
         var body = Visit(node.Body);
         return Expression.Lambda(body, node.Parameters);
     }
-}
 
+    public static string FormatTimeSpanForTimescaleDb(TimeSpan timeSpan)
+    {
+        StringBuilder builder = new StringBuilder();
+
+        void AppendIfNonZero(int value, string unit)
+        {
+            if (value > 0)
+            {
+                builder.Append($"{value} {unit}{(value > 1 ? "s" : "")} ");
+            }
+        }
+
+        AppendIfNonZero(timeSpan.Days, "day");
+        AppendIfNonZero(timeSpan.Hours, "hour");
+        AppendIfNonZero(timeSpan.Minutes, "minute");
+        AppendIfNonZero(timeSpan.Seconds, "second");
+
+        return builder.ToString().TrimEnd();
+    }
+
+    protected override Expression VisitMethodCall(MethodCallExpression node)
+    {
+        if (node.Method.DeclaringType != typeof(TimescaleDbExtensions)) return base.VisitMethodCall(node);
+        var expression = Visit(node.Arguments[0]);
+
+        TimeSpan interval;
+        switch (node.Method.Name)
+        {
+            case nameof(TimescaleDbExtensions.TimeBucket):
+            {
+                interval = node.Arguments[1] switch
+                {
+                    ConstantExpression constantExpression when constantExpression.Type == typeof(TimeSpan) =>
+                        (TimeSpan)constantExpression.Value!,
+                    MemberExpression { Member: FieldInfo fieldInfo } memberExpression when fieldInfo.FieldType == typeof(TimeSpan) =>
+                        (TimeSpan)fieldInfo.GetValue(((ConstantExpression)memberExpression.Expression!).Value)!,
+                    _ => throw new InvalidOperationException("Unexpected expression type.")
+                };
+
+                return new SqlExpression($"time_bucket(INTERVAL '{FormatTimeSpanForTimescaleDb(interval)}', {expression})");
+            }
+            case nameof(TimescaleDbExtensions.TimeBucketGapFill):
+                var start = Visit(node.Arguments[2]);
+                var end = Visit(node.Arguments[3]);
+                interval = node.Arguments[1] switch
+                {
+                    ConstantExpression constantExpression when constantExpression.Type == typeof(TimeSpan) =>
+                        (TimeSpan)constantExpression.Value!,
+                    MemberExpression { Member: FieldInfo fieldInfo } memberExpression when fieldInfo.FieldType == typeof(TimeSpan) =>
+                        (TimeSpan)fieldInfo.GetValue(((ConstantExpression)memberExpression.Expression!).Value)!,
+                    _ => throw new InvalidOperationException("Unexpected expression type.")
+                };
+                return new SqlExpression(
+                    $"time_bucket_gapfill(INTERVAL '{FormatTimeSpanForTimescaleDb(interval)}', {expression}, {start}, {end})");
+            case nameof(TimescaleDbExtensions.First):
+                var firstTimeColumn = Visit(node.Arguments[1]);
+                return new SqlExpression($"first({expression}, {firstTimeColumn})");
+            case nameof(TimescaleDbExtensions.Last):
+                var lastTimeColumn = Visit(node.Arguments[1]);
+                return new SqlExpression($"last({expression}, {lastTimeColumn})");
+            case nameof(TimescaleDbExtensions.Lag):
+                var lagStep = Visit(node.Arguments[1]);
+                return new SqlExpression($"lag({expression}, {lagStep})");
+            case nameof(TimescaleDbExtensions.Lead):
+                var leadStep = Visit(node.Arguments[1]);
+                return new SqlExpression($"lead({expression}, {leadStep})");
+            case nameof(TimescaleDbExtensions.DateTrunc):
+                var truncationUnit = (string)Expression.Lambda(node.Arguments[1]).Compile().DynamicInvoke()!;
+                var timestamp = Visit(node.Arguments[0]);
+
+                return timestamp is not SqlExpression timestampSqlExpression
+                    ? throw new NotSupportedException("The argument for the DateTrunc method must be an SqlExpression")
+                    : new SqlExpression($"date_trunc('{truncationUnit}', {timestampSqlExpression.Sql})");
+            default:
+                return base.VisitMethodCall(node);
+        }
+    }
+}

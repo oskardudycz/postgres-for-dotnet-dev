@@ -1,81 +1,26 @@
-﻿using System.Drawing;
-using System.Text.Json;
+﻿using System.Text.Json;
 using MongoDB.Driver;
 using Npgsql;
+using PostgresForDotnetDev.Core;
 using PostgresForDotnetDev.Pongo.Filtering.TimescaleDB;
 
 namespace PostgresForDotnetDev.Pongo;
 
 public class PongoCollection<T>: IPongoCollection<T>
 {
-    private readonly string _connectionString;
-
-    private readonly string _tableName;
+    private readonly NpgsqlConnection connection;
+    private readonly string tableName;
 
     public PongoCollection(
-        string connectionString,
+        NpgsqlConnection connection,
         string tableName
     )
     {
-        _connectionString = connectionString;
-        _tableName = tableName;
+        this.connection = connection;
+        this.tableName = tableName;
 
-        // Generate SQL for generated columns
-        var generatedColumnsSql = GetGeneratedColumnsSql();
-
-        if (generatedColumnsSql.Length > 0)
-            generatedColumnsSql = "," + generatedColumnsSql;
-
-        // Create the table if it does not exist
-        var createTableSql = $@"
-        CREATE TABLE IF NOT EXISTS {_tableName} (
-            id SERIAL PRIMARY KEY,
-            data JSONB
-            {generatedColumnsSql}
-        );";
-
-        using var connection = new NpgsqlConnection(_connectionString);
-        connection.Open();
-
-        using var command = new NpgsqlCommand(createTableSql, connection);
-        command.ExecuteNonQuery();
+        this.connection.CreateTableIfNotExists<T>(this.tableName);
     }
-
-    private static string GetGeneratedColumnsSql()
-    {
-        var generatedColumns = new List<string>();
-
-        var properties = typeof(T).GetProperties();
-        foreach (var property in properties)
-        {
-            if (property.PropertyType == typeof(Point))
-            {
-                generatedColumns.Add(
-                    $"{property.Name} GEOMETRY GENERATED ALWAYS AS (ST_GeomFromGeoJSON(data ->> '{property.Name}')) STORED");
-            }
-            else if (property.PropertyType == typeof(DateTimeOffset))
-            {
-                generatedColumns.Add(
-                    $"{property.Name} TIMESTAMPTZ GENERATED ALWAYS AS ((data ->> '{property.Name}')::TIMESTAMPTZ) STORED");
-            }
-            else if (property.PropertyType == typeof(List<Point>))
-            {
-                // Assuming that the list of points is stored as a GeoJSON FeatureCollection in the JSONB column
-                generatedColumns.Add(
-                    $"{property.Name} GEOMETRY GENERATED ALWAYS AS (ST_Collect(ST_GeomFromGeoJSON(feature ->> 'geometry'))) STORED FROM json_array_elements(data -> '{property.Name}' -> 'features') AS feature");
-            }
-            else if (property.PropertyType == typeof(List<DateTime>))
-            {
-                // Assuming that the list of timestamps is stored as an array of ISO 8601 formatted strings in the JSONB column
-                generatedColumns.Add(
-                    $"{property.Name} TIMESTAMP[] GENERATED ALWAYS AS (ARRAY(SELECT (elem ->> 'timestamp')::TIMESTAMPTZ FROM json_array_elements(data -> '{property.Name}') AS elem)) STORED");
-            }
-            // Add more conditions here for other property types
-        }
-
-        return string.Join(",", generatedColumns);
-    }
-
 
     public async Task<IAsyncCursor<TProjection>> FindAsync<TProjection>(
         FilterDefinition<T> filter,
@@ -83,16 +28,12 @@ public class PongoCollection<T>: IPongoCollection<T>
         string? encryptionKey = null,
         CancellationToken cancellationToken = default)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
-        await connection.OpenAsync(cancellationToken);
-
         var whereClause =
             filter.ToSqlExpression(); // You need to implement this method to convert the filter to an SQL expression.
 
-
         var sql = encryptionKey != null
-            ? $"SELECT pgp_sym_decrypt(data, @EncryptionKey) FROM {_tableName} WHERE {whereClause}"
-            : $"SELECT data FROM {_tableName} WHERE {whereClause}";
+            ? $"SELECT pgp_sym_decrypt(data, @EncryptionKey) FROM {tableName} WHERE {whereClause}"
+            : $"SELECT data FROM {tableName} WHERE {whereClause}";
 
         await using var command = new NpgsqlCommand(sql, connection);
 
@@ -129,13 +70,11 @@ public class PongoCollection<T>: IPongoCollection<T>
         CancellationToken cancellationToken = default)
     {
         var jsonString = JsonSerializer.Serialize(document);
-        await using var connection = new NpgsqlConnection(_connectionString);
-        await connection.OpenAsync(cancellationToken);
 
         var query =
             encryptionKey == null
                 ? $@"
-                    INSERT INTO {_tableName} (data)
+                    INSERT INTO {tableName} (data)
                     VALUES ('{jsonString}'::jsonb || jsonb_build_object('_id', uuid_generate_v4()))
                     RETURNING id, data;
                 "
@@ -167,14 +106,11 @@ public class PongoCollection<T>: IPongoCollection<T>
         UpdateOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
-        await connection.OpenAsync(cancellationToken);
-
         var whereClause =
             filter.ToSqlExpression(); // You need to implement this method to convert the filter to an SQL expression.
         var updateExpression =
             update.ToSqlExpression(); // You need to implement this method to convert the update to an SQL expression.
-        var sql = $"UPDATE {_tableName} SET data = data || @update::jsonb WHERE {whereClause}";
+        var sql = $"UPDATE {tableName} SET data = data || @update::jsonb WHERE {whereClause}";
 
         await using var command = new NpgsqlCommand(sql, connection);
         command.Parameters.AddWithValue("update", updateExpression);
