@@ -1,0 +1,10 @@
+version: '3.8'
+services:
+    timescaledb:
+        image: timescale/timescaledb-ha:pg15.2-ts2.10.1-p2
+        ports:
+            - "5432:5432"
+        environment:
+            - POSTGRES_USER=postgres
+            - POSTGRES_PASSWORD=postgres
+            - POSTGRES_DB=postgres
