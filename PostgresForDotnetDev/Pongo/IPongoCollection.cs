@@ -7,11 +7,13 @@ public interface IPongoCollection<T>
     Task<IAsyncCursor<TProjection>> FindAsync<TProjection>(
         FilterDefinition<T> filter,
         FindOptions<T, TProjection>? options = null,
+        string? encryptionKey = null,
         CancellationToken cancellationToken = default);
 
     Task InsertOneAsync(
         T document,
         InsertOneOptions? options = null,
+        string? encryptionKey = null,
         CancellationToken cancellationToken = default);
 
     Task<UpdateResult> UpdateOneAsync(

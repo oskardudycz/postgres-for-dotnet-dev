@@ -1,7 +1,11 @@
-﻿using System.Text.Json;
+﻿using System.Drawing;
+using System.Linq.Expressions;
+using System.Text;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
+using PostgresForDotnetDev.Pongo.Filtering.TimescaleDB;
+using ExpressionVisitor = System.Linq.Expressions.ExpressionVisitor;
 
 namespace PostgresForDotnetDev.Pongo;
 
@@ -9,59 +13,122 @@ public static class PongoExpressionExtensions
 {
     public static string ToSqlExpression<T>(this FilterDefinition<T> filter)
     {
+        if (filter is NearFilterOperator nearFilter)
+        {
+            var locationColumnName = nearFilter.PropertyName;
+            return $"ST_DWithin({locationColumnName}, ST_SetSRID(ST_MakePoint(@Longitude, @Latitude), 4326), @Distance)";
+        }
         // Use a BsonDocument to access MongoDB filter elements
         var bsonFilter = filter.Render(BsonSerializer.SerializerRegistry.GetSerializer<T>(),
             BsonSerializer.SerializerRegistry);
-        return BsonFilterToSqlExpression(bsonFilter);
-    }
 
-    private static string BsonFilterToSqlExpression(BsonDocument bsonFilter)
-    {
-        // Implement a recursive function to handle various filter conditions and logical operators
-        var conditions = new List<string>();
+        var propertyToColumnMapping = GetMappedColumns<T>();
+        var filterBuilder = new StringBuilder();
+        filterBuilder.Append(BsonFilterToSqlExpression(bsonFilter));
 
-        foreach (var element in bsonFilter)
+        // ... your existing filtering logic ...
+
+        // Check for property names in the filter and replace them with the corresponding generated column names
+        foreach (var kvp in propertyToColumnMapping)
         {
-            var field = element.Name;
-            var value = element.Value;
+            var propertyName = "\"" + kvp.Key + "\"";
+            var columnName = kvp.Value;
 
-            switch (field)
-            {
-                case "$and":
-                case "$or":
-                    var operatorName = field == "$and" ? "AND" : "OR";
-                    var subFilters = value.AsBsonArray;
-                    var subConditions = subFilters
-                        .Select(subFilter => BsonFilterToSqlExpression(subFilter.AsBsonDocument)).ToList();
-                    conditions.Add($"({string.Join($" {operatorName} ", subConditions)})");
-                    break;
-
-                case "$eq":
-                case "$ne":
-                case "$gt":
-                case "$gte":
-                case "$lt":
-                case "$lte":
-                    var sqlOperator = field switch
-                    {
-                        "$eq" => "=",
-                        "$ne" => "<>",
-                        "$gt" => ">",
-                        "$gte" => ">=",
-                        "$lt" => "<",
-                        "$lte" => "<=",
-                        _ => throw new NotSupportedException($"Unsupported filter operator: {field}")
-                    };
-                    conditions.Add($"data->>'{field}' {sqlOperator} '{value}'");
-                    break;
-
-                default:
-                    conditions.Add($"data->>'{field}' = '{value}'");
-                    break;
-            }
+            filterBuilder.Replace(propertyName, columnName);
         }
 
-        return string.Join(" AND ", conditions);
+        return filterBuilder.ToString();
+    }
+
+    public static string FilterConditionToSqlExpression<T>(Expression<Func<T, bool>> predicate, string tableName)
+    {
+        var expressionVisitor = new CustomExpressionVisitor(tableName);
+        var sqlExpression = expressionVisitor.Visit(predicate);
+        return sqlExpression.ToString();
+    }
+
+    public static string FilterConditionsToSqlExpression<T>(List<FilterCondition<T>> conditions, string tableName)
+    {
+        var filterExpressions = conditions.Select(condition => FilterConditionToSqlExpression(condition.Predicate, tableName)).ToList();
+        var sqlExpression = string.Join(" AND ", filterExpressions);
+        return sqlExpression;
+    }
+
+    private static Dictionary<string, string> GetMappedColumns<T>()
+    {
+        var mappedColumns = new Dictionary<string, string>();
+
+        var properties = typeof(T).GetProperties();
+        foreach (var property in properties)
+        {
+            if (property.PropertyType == typeof(Point) || property.PropertyType == typeof(List<Point>))
+            {
+                mappedColumns.Add(property.Name, property.Name);
+            }
+            else if (property.PropertyType == typeof(DateTime) || property.PropertyType == typeof(List<DateTime>))
+            {
+                mappedColumns.Add(property.Name, property.Name);
+            }
+            // Add more conditions here for other property types
+        }
+
+        return mappedColumns;
+    }
+
+
+    private static string BsonFilterToSqlExpression(BsonDocument filter)
+    {
+        var conditionsList = new List<string>();
+        foreach (var field in filter)
+        {
+            if (!field.Value.IsBsonDocument)
+            {
+                conditionsList.Add($"data->>'{field.Name}' = {BsonValueToSqlLiteral(field.Value)}");
+                continue;
+            }
+
+            var subDocument = field.Value.AsBsonDocument;
+            conditionsList.AddRange(subDocument.Names.Select(operatorName =>
+                operatorName is "$and" or "$or" or "$not"
+                    ? ProcessLogicalOperator(operatorName, subDocument[operatorName].AsBsonArray)
+                    : ProcessQueryOperator(field.Name, operatorName, subDocument[operatorName])));
+        }
+
+        return string.Join(" AND ", conditionsList);
+    }
+
+    private static string BsonValueToSqlLiteral(BsonValue value)
+    {
+        return (value.IsString ? $"'{value.AsString.Replace("'", "''")}'" : value.ToString())!;
+    }
+
+    private static string ProcessQueryOperator(string field, string operatorName, BsonValue value)
+    {
+        return operatorName switch
+        {
+            "$eq" => $"data->>'{field}' = {BsonValueToSqlLiteral(value)}",
+            "$ne" => $"data->>'{field}' <> {BsonValueToSqlLiteral(value)}",
+            "$gt" => $"CAST(data->>'{field}' AS DOUBLE PRECISION) > {value}",
+            "$gte" => $"CAST(data->>'{field}' AS DOUBLE PRECISION) >= {value}",
+            "$lt" => $"CAST(data->>'{field}' AS DOUBLE PRECISION) < {value}",
+            "$lte" => $"CAST(data->>'{field}' AS DOUBLE PRECISION) <= {value}",
+            "$in" => $"data->>'{field}' IN ({string.Join(", ", value.AsBsonArray.Select(BsonValueToSqlLiteral))})",
+            "$nin" => $"data->>'{field}' NOT IN ({string.Join(", ", value.AsBsonArray.Select(BsonValueToSqlLiteral))})",
+            _ => throw new NotSupportedException($"Unsupported query operator: {operatorName}")
+        };
+    }
+
+    public static string ProcessLogicalOperator(string operatorName, BsonArray subfilters)
+    {
+        var conditions = subfilters.Select(subfilter => BsonFilterToSqlExpression(subfilter.AsBsonDocument)).ToArray();
+        var joinedConditions = string.Join(" AND ", conditions);
+        return operatorName switch
+        {
+            "$and" => $"({joinedConditions})",
+            "$or" => $"({string.Join(" OR ", conditions)})",
+            "$not" => $"NOT ({joinedConditions})",
+            _ => throw new NotSupportedException($"Unsupported logical operator: {operatorName}")
+        };
     }
 
     public static string ToSqlExpression<T>(this UpdateDefinition<T> update)
@@ -202,5 +269,92 @@ public static class PongoExpressionExtensions
     private static string SanitizeStringValue(string input)
     {
         return input.Replace("'", "''");
+    }
+}
+
+public class CustomExpressionVisitor : ExpressionVisitor
+{
+    private readonly string _tableName;
+
+    public CustomExpressionVisitor(string tableName)
+    {
+        _tableName = tableName;
+    }
+
+    protected override Expression VisitBinary(BinaryExpression node)
+    {
+        var left = Visit(node.Left);
+        var right = Visit(node.Right);
+
+        var op = node.NodeType switch
+        {
+            ExpressionType.Equal => "=",
+            ExpressionType.NotEqual => "<>",
+            ExpressionType.GreaterThan => ">",
+            ExpressionType.GreaterThanOrEqual => ">=",
+            ExpressionType.LessThan => "<",
+            ExpressionType.LessThanOrEqual => "<=",
+            _ => throw new NotSupportedException($"The binary operator '{node.NodeType}' is not supported")
+        };
+
+        return Expression.Constant($"{left} {op} {right}");
+    }
+
+    protected override Expression VisitMember(MemberExpression node)
+    {
+        return Expression.Constant($"{_tableName}.{node.Member.Name}");
+    }
+
+    protected override Expression VisitConstant(ConstantExpression node)
+    {
+        return Expression.Constant($"'{node.Value}'");
+    }
+
+    protected override Expression VisitMethodCall(MethodCallExpression node)
+    {
+        if (node.Method.DeclaringType != typeof(TimescaleDbExtensions)) return base.VisitMethodCall(node);
+
+        var expression = Visit(node.Arguments[0]);
+        string? sqlExpression = null;
+
+        if (node.Method.Name == nameof(TimescaleDbExtensions.TimeBucket) || node.Method.Name == nameof(TimescaleDbExtensions.TimeBucketGapFill))
+        {
+            var interval = (TimeSpan)((ConstantExpression)Visit(node.Arguments[1])).Value!;
+            string intervalString = $"{interval:G}"; // Format the TimeSpan as a string
+            sqlExpression = $"time_bucket(INTERVAL '{intervalString}', {expression})";
+        }
+
+        switch (node.Method.Name)
+        {
+            case nameof(TimescaleDbExtensions.TimeBucketGapFill):
+                var interval = (TimeSpan)((ConstantExpression)Visit(node.Arguments[1])).Value!;
+                string intervalString = $"{interval:G}"; // Format the TimeSpan as a string
+                var start = Visit(node.Arguments[2]);
+                var end = Visit(node.Arguments[3]);
+                sqlExpression = $"time_bucket_gapfill(INTERVAL '{intervalString}', {expression}, {start}, {end})";
+                break;
+            case nameof(TimescaleDbExtensions.First):
+                var firstTimeColumn = Visit(node.Arguments[1]);
+                sqlExpression = $"first({expression}, {firstTimeColumn})";
+                break;
+            case nameof(TimescaleDbExtensions.Last):
+                var lastTimeColumn = Visit(node.Arguments[1]);
+                sqlExpression = $"last({expression}, {lastTimeColumn})";
+                break;
+            case nameof(TimescaleDbExtensions.Lag):
+                var lagStep = Visit(node.Arguments[1]);
+                sqlExpression = $"lag({expression}, {lagStep})";
+                break;
+            case nameof(TimescaleDbExtensions.Lead):
+                var leadStep = Visit(node.Arguments[1]);
+                sqlExpression = $"lead({expression}, {leadStep})";
+                break;
+            case nameof(TimescaleDbExtensions.DateTrunc):
+                var dateTruncField = Visit(node.Arguments[1]);
+                sqlExpression = $"date_trunc({dateTruncField}, {expression})";
+                break;
+        }
+
+        return Expression.Constant(sqlExpression);
     }
 }
