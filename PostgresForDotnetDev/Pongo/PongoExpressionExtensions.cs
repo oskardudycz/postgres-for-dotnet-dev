@@ -1,4 +1,5 @@
-﻿using System.Drawing;
+﻿using System.Collections;
+using System.Drawing;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
@@ -143,6 +144,36 @@ public static class PongoExpressionExtensions
         return BsonUpdateToSqlExpression(bsonUpdate.AsBsonDocument);
     }
 
+    private static string GenerateJsonValue(object? value)
+    {
+        while (true)
+        {
+            switch (value)
+            {
+                case null:
+                    return "null";
+                case string:
+                    return $"'\"{SanitizeStringValue(value.ToString()!)}\"'";
+                case bool boolValue:
+                    return boolValue ? "true" : "false";
+                case int or long or float or double or decimal:
+                    return value.ToString()!;
+                case IEnumerable enumerable:
+                {
+                    var items = enumerable.Cast<object>()
+                        .Select(GenerateJsonValue);
+
+                    return $"[{string.Join(",", items)}]";
+                }
+                case BsonString bsonString:
+                    value = bsonString.ToString();
+                    continue;
+                default:
+                    throw new ArgumentException($"Unsupported value type: {value.GetType()}");
+            }
+        }
+    }
+
     private static string BsonUpdateToSqlExpression(BsonDocument bsonUpdate)
     {
         var operations = new List<string>();
@@ -162,7 +193,7 @@ public static class PongoExpressionExtensions
                 switch (updateOperator)
                 {
                     case "$set":
-                        operation = $"jsonb_set(data, '{{{field}}}', '{value}', true)";
+                        operation = $"jsonb_set(data, '{{{field}}}', {GenerateJsonValue(value)}, true)";
                         break;
 
                     case "$unset":
@@ -214,10 +245,11 @@ public static class PongoExpressionExtensions
                         else
                         {
                             operation =
-                                $"jsonb_set(data, '{{{field}}}', COALESCE(data->'{field}', '[]'::jsonb) || '[{value}]'::jsonb, true)";
+                                $"jsonb_set(data, '{{{field}}}', COALESCE(data->'{field}', '[]'::jsonb) || '[{GenerateJsonValue(value)}]'::jsonb, true)";
                         }
 
                         break;
+
 
                     case "$addToSet":
                         if (value.IsBsonDocument && value.AsBsonDocument.Contains("$each"))
@@ -231,9 +263,8 @@ public static class PongoExpressionExtensions
                         }
                         else
                         {
-                            var sanitizedValue = SanitizeStringValue(value.ToString()!);
                             operation =
-                                $"jsonb_set(data, '{{{field}}}', (COALESCE(data->'{field}', '[]'::jsonb) || '[{sanitizedValue}]'::jsonb) - 'null', true)";
+                                $"jsonb_set(data, '{{{field}}}', (COALESCE(data->'{field}', '[]'::jsonb) || '[{GenerateJsonValue(value)}]'::jsonb) - 'null', true)";
                         }
 
                         break;
@@ -247,13 +278,12 @@ public static class PongoExpressionExtensions
                         break;
 
                     case "$pull":
-                        var sanitizedPullValue = SanitizeStringValue(value.ToString()!);
-                        operation = $"jsonb_set(data, '{{{field}}}', data->'{field}' - '{sanitizedPullValue}', true)";
+                        operation = $"jsonb_set(data, '{{{field}}}', data->'{field}' - '{GenerateJsonValue(value)}', true)";
                         break;
 
                     case "$pullAll":
                         var pullAllArray = value.AsBsonArray;
-                        var pullAllConditions = pullAllArray.Select(el => SanitizeStringValue(el.ToString()!))
+                        var pullAllConditions = pullAllArray.Select(el => GenerateJsonValue(el.ToString()!))
                             .Select(sanitizedElement => $"data->'{field}' - '{sanitizedElement}'").ToList();
 
                         operation = $"jsonb_set(data, '{{{field}}}', {string.Join(" || ", pullAllConditions)}, true)";
@@ -418,12 +448,14 @@ public class CustomExpressionVisitor: ExpressionVisitor
                 {
                     ConstantExpression constantExpression when constantExpression.Type == typeof(TimeSpan) =>
                         (TimeSpan)constantExpression.Value!,
-                    MemberExpression { Member: FieldInfo fieldInfo } memberExpression when fieldInfo.FieldType == typeof(TimeSpan) =>
+                    MemberExpression { Member: FieldInfo fieldInfo } memberExpression when fieldInfo.FieldType ==
+                        typeof(TimeSpan) =>
                         (TimeSpan)fieldInfo.GetValue(((ConstantExpression)memberExpression.Expression!).Value)!,
                     _ => throw new InvalidOperationException("Unexpected expression type.")
                 };
 
-                return new SqlExpression($"time_bucket(INTERVAL '{FormatTimeSpanForTimescaleDb(interval)}', {expression})");
+                return new SqlExpression(
+                    $"time_bucket(INTERVAL '{FormatTimeSpanForTimescaleDb(interval)}', {expression})");
             }
             case nameof(TimescaleDbExtensions.TimeBucketGapFill):
                 var start = Visit(node.Arguments[2]);
@@ -432,7 +464,8 @@ public class CustomExpressionVisitor: ExpressionVisitor
                 {
                     ConstantExpression constantExpression when constantExpression.Type == typeof(TimeSpan) =>
                         (TimeSpan)constantExpression.Value!,
-                    MemberExpression { Member: FieldInfo fieldInfo } memberExpression when fieldInfo.FieldType == typeof(TimeSpan) =>
+                    MemberExpression { Member: FieldInfo fieldInfo } memberExpression when fieldInfo.FieldType ==
+                        typeof(TimeSpan) =>
                         (TimeSpan)fieldInfo.GetValue(((ConstantExpression)memberExpression.Expression!).Value)!,
                     _ => throw new InvalidOperationException("Unexpected expression type.")
                 };

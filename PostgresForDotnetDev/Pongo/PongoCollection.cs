@@ -1,8 +1,10 @@
 ﻿using System.Text.Json;
 using MongoDB.Driver;
 using Npgsql;
+using NpgsqlTypes;
 using PostgresForDotnetDev.Core;
 using PostgresForDotnetDev.Pongo.Filtering.TimescaleDB;
+using PostgresForDotnetDev.Pongo.Querying;
 
 namespace PostgresForDotnetDev.Pongo;
 
@@ -50,17 +52,9 @@ public class PongoCollection<T>: IPongoCollection<T>
             command.Parameters.AddWithValue("EncryptionKey", encryptionKey);
         }
 
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var reader = await command.ExecuteReaderAsync(cancellationToken);
 
-        var results = new List<TProjection>();
-        while (await reader.ReadAsync(cancellationToken))
-        {
-            var jsonString = reader.GetString(0);
-            var item = JsonSerializer.Deserialize<TProjection>(jsonString)!;
-            results.Add(item);
-        }
-
-        return default!; //new AsyncCursor<TProjection>(results);
+        return new PongoAsyncCursor<TProjection>(reader);
     }
 
     public async Task InsertOneAsync(
@@ -113,10 +107,10 @@ public class PongoCollection<T>: IPongoCollection<T>
             filter.ToSqlExpression(); // You need to implement this method to convert the filter to an SQL expression.
         var updateExpression =
             update.ToSqlExpression(); // You need to implement this method to convert the update to an SQL expression.
-        var sql = $"UPDATE {tableName} SET data = data || @update::jsonb WHERE {whereClause}";
+        var sql = $"UPDATE {tableName} SET data = data || {updateExpression}::jsonb WHERE {whereClause}";
 
         await using var command = new NpgsqlCommand(sql, connection);
-        command.Parameters.AddWithValue("update", updateExpression);
+        
         var rowsAffected = await command.ExecuteNonQueryAsync(cancellationToken);
 
         return new UpdateResult.Acknowledged(rowsAffected, rowsAffected, default);

@@ -1,5 +1,7 @@
 ﻿using Dapper;
 using FluentAssertions;
+using MongoDB.Bson;
+using MongoDB.Driver;
 using Npgsql;
 using PostgresForDotnetDev.Pongo;
 using PostgresForDotnetDevs.Tests.Core;
@@ -61,23 +63,53 @@ public class PostgresJsonCollectionTests
 
         Assert.Equal(1, count);
     }
-    //
-    // [Fact]
-    // public async Task FindOneAsync_ShouldReturnDocument()
-    // {
-    //     // Arrange
-    //     await ClearTable();
-    //     var collection = new PongoCollection<TestData>(_connectionString, _tableName);
-    //     var document = new TestData { Name = "Test Document" };
-    //     await collection.InsertOneAsync(document);
-    //     var filter = new BsonDocument("_id", document._id);
-    //
-    //     // Act
-    //     // var foundDocument = await collection.FindAsync(filter);
-    //     //
-    //     // // Assert
-    //     // Assert.NotNull(foundDocument);
-    //     // Assert.Equal(document._id, foundDocument._id);
-    //     // Assert.Equal(document.Name, foundDocument.Name);
-    // }
+
+    [Fact]
+    public async Task FindOneAsync_ShouldReturnDocument()
+    {
+        // Arrange
+        var client = new PongoClient(connectionString);
+        var database = client.GetDatabase();
+        var collection = database.GetCollection<TestData>();
+        var document = new TestData { Name = "Test Document" };
+        await collection.InsertOneAsync(document);
+        var filter = Builders<TestData>.Filter.Eq(x => x._id, document._id);
+
+        //Act
+        var foundDocument = await (await collection.FindAsync<TestData>(filter)).FirstAsync();
+
+        // Assert
+        Assert.NotNull(foundDocument);
+        Assert.Equal(document._id, foundDocument._id);
+        Assert.Equal(document.Name, foundDocument.Name);
+    }
+
+    [Fact]
+    public async Task UpdateOneAsync_ShouldUpdateDocument()
+    {
+        const string tableName = "postgresfordotnetdevs_tests_pongo_testdata";
+        // Arrange
+        var client = new PongoClient(connectionString);
+        var database = client.GetDatabase();
+        var collection = database.GetCollection<TestData>();
+        var document = new TestData { Name = "Test Document" };
+
+        await collection.InsertOneAsync(document);
+
+        var filter = Builders<TestData>.Filter.Eq(x => x._id, document._id);
+        var update = Builders<TestData>.Update.Set(x => x.Name, "Updated Document");
+
+        // Act
+        var updateResult = await collection.UpdateOneAsync(filter, update);
+
+        // Assert
+        Assert.NotNull(document._id);
+        Assert.Equal(1, updateResult.ModifiedCount);
+
+        var query = $"SELECT data->>'Name' as Name FROM {tableName} WHERE data->>'_id' = '{document._id}';";
+        var updatedName = connection.QuerySingle<string>(query, connection);
+
+        Assert.Equal("Updated Document", updatedName);
+    }
+
 }
