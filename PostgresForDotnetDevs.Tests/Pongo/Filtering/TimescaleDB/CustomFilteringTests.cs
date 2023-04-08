@@ -58,7 +58,7 @@ public class CustomExpressionVisitorTests
     [Fact]
     public void TestTimeBucketOperator()
     {
-        TimeSpan interval = TimeSpan.FromHours(1);
+        var interval = TimeSpan.FromHours(1);
         Expression<Func<TestDocument, bool>> filter = doc =>
             doc.CreatedAt.TimeBucket(interval) == new DateTimeOffset(new DateTime(2023, 1, 1, 1, 0, 0), TimeSpan.Zero);
         var visitor = new CustomExpressionVisitor("my_table");

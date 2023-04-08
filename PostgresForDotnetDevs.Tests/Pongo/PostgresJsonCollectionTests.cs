@@ -1,4 +1,6 @@
-﻿using FluentAssertions;
+﻿using Dapper;
+using FluentAssertions;
+using Npgsql;
 using PostgresForDotnetDev.Pongo;
 using PostgresForDotnetDevs.Tests.Core;
 
@@ -14,10 +16,11 @@ public class PostgresJsonCollectionTests
 {
     private readonly string connectionString;
     private readonly PostgresSchemaProvider schemaProvider;
+    private readonly NpgsqlConnection connection;
 
     public PostgresJsonCollectionTests()
     {
-        var connection = PostgresConnectionProvider.GetFreshDbConnection();
+        connection = PostgresConnectionProvider.GetFreshDbConnection();
         connectionString = PostgresConnectionProvider.GetFreshConnectionString();
         schemaProvider = new PostgresSchemaProvider(connection);
     }
@@ -25,7 +28,7 @@ public class PostgresJsonCollectionTests
     [Fact]
     public void GettingCollection_SetsUpTable()
     {
-        var expectedTableName = "postgresfordotnetdevs_tests_pongo_testdata";
+        const string expectedTableName = "postgresfordotnetdevs_tests_pongo_testdata";
 
         var client = new PongoClient(connectionString);
         var database = client.GetDatabase();
@@ -37,29 +40,27 @@ public class PostgresJsonCollectionTests
         collectionTable!.Name.Should().Be(expectedTableName);
     }
 
-    // [Fact]
-    // public async Task InsertOneAsync_ShouldInsertDocument()
-    // {
-    //     // Arrange
-    //     await ClearTable();
-    //     var collection = new PongoCollection<TestData>(_connectionString, _tableName);
-    //     var document = new TestData { Name = "Test Document" };
-    //
-    //     // Act
-    //     await collection.InsertOneAsync(document);
-    //
-    //     // Assert
-    //     Assert.NotNull(document._id);
-    //
-    //     using var connection = new NpgsqlConnection(_connectionString);
-    //     await connection.OpenAsync();
-    //
-    //     var query = $"SELECT COUNT(*) FROM {_tableName} WHERE data->>'_id' = '{document._id}';";
-    //     using var command = new NpgsqlCommand(query, connection);
-    //     var count = (long?)await command.ExecuteScalarAsync();
-    //
-    //     Assert.Equal(1, count);
-    // }
+    [Fact]
+    public async Task InsertOneAsync_ShouldInsertDocument()
+    {
+        const string tableName = "postgresfordotnetdevs_tests_pongo_testdata";
+        // Arrange
+        var client = new PongoClient(connectionString);
+        var database = client.GetDatabase();
+        var collection = database.GetCollection<TestData>();
+        var document = new TestData { Name = "Test Document" };
+
+        // Act
+        await collection.InsertOneAsync(document);
+
+        // Assert
+        Assert.NotNull(document._id);
+
+        var query = $"SELECT COUNT(*) FROM {tableName} WHERE data->>'_id' = '{document._id}';";
+        var count = connection.QuerySingle<long>(query, connection);
+
+        Assert.Equal(1, count);
+    }
     //
     // [Fact]
     // public async Task FindOneAsync_ShouldReturnDocument()

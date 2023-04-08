@@ -74,14 +74,16 @@ public class PongoCollection<T>: IPongoCollection<T>
         var query =
             encryptionKey == null
                 ? $@"
-                    INSERT INTO {tableName} (data)
-                    VALUES ('{jsonString}'::jsonb || jsonb_build_object('_id', uuid_generate_v4()))
+                    INSERT INTO {tableName} (id, data)
+                    WITH uuid_generator AS (SELECT uuid_generate_v4() AS uuid)
+                    SELECT uuid, ('{jsonString}'::jsonb || jsonb_build_object('_id', uuid)) FROM uuid_generator
                     RETURNING id, data;
                 "
                 : @"
                     INSERT INTO {_tableName} (data)
-                    VALUES (pgp_sym_encrypt('{jsonString}'::jsonb || jsonb_build_object('_id', uuid_generate_v4()), @EncryptionKey))
-                    RETURNING id, data;
+                    WITH uuid_generator AS (SELECT uuid_generate_v4() AS uuid)
+                    SELECT uuid, (pgp_sym_encrypt('{jsonString}'::jsonb || jsonb_build_object('_id', uuid), @EncryptionKey)) FROM uuid_generator
+                    RETURNING id;
                 ";
 
 
@@ -93,11 +95,12 @@ public class PongoCollection<T>: IPongoCollection<T>
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
-        // if (await reader.ReadAsync(cancellationToken))
-        // {
-        //     var insertedData = reader.GetString(1);
-        //     document = JsonSerializer.Deserialize<T>(insertedData);
-        // }
+        if (await reader.ReadAsync(cancellationToken))
+        {
+            var newId = reader.GetString(0);
+
+            document!.GetType().GetProperty("_id")?.SetValue(document, newId);
+        }
     }
 
     public async Task<UpdateResult> UpdateOneAsync(
