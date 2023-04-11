@@ -105,8 +105,8 @@ public class FilterExpressionVisitor: ExpressionVisitor
             }
         }
 
-        string jsonbExpression = BuildJsonbExpression(node, "data");
-        return new SqlExpression($"{tableName}.\"{jsonbExpression}\"");
+        string jsonbExpression = BuildJsonbExpression(node, "\"data\"");
+        return new SqlExpression($"{tableName}.{jsonbExpression}");
     }
 
     private static string BuildJsonbExpression(MemberExpression node, string currentExpression)

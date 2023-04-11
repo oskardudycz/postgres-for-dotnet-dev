@@ -21,7 +21,7 @@ public class CustomExpressionVisitorTests
         var visitor = new FilterExpressionVisitor("my_table", new TimeScaleOperatorVisitor());
         var result = visitor.Visit(filter) as LambdaExpression;
         var sqlExpression = result?.Body as SqlExpression;
-        Assert.Equal("'my_table.Name' = 'value1'", sqlExpression?.ToString());
+        Assert.Equal("my_table.\"data\"->>'Name' = 'value1'", sqlExpression?.ToString());
     }
 
     [Fact]
@@ -31,7 +31,7 @@ public class CustomExpressionVisitorTests
         var visitor = new FilterExpressionVisitor("my_table", new TimeScaleOperatorVisitor());
         var result = visitor.Visit(filter) as LambdaExpression;
         var sqlExpression = result?.Body as SqlExpression;
-        Assert.Equal("'my_table.Value' > 3", sqlExpression?.ToString());
+        Assert.Equal("my_table.\"data\"->>'Value' > 3", sqlExpression?.ToString());
     }
 
     [Fact]
@@ -41,7 +41,7 @@ public class CustomExpressionVisitorTests
         var visitor = new FilterExpressionVisitor("my_table", new TimeScaleOperatorVisitor());
         var result = visitor.Visit(filter) as LambdaExpression;
         var sqlExpression = result?.Body as SqlExpression;
-        Assert.Equal("'my_table.Id' < 10", sqlExpression?.ToString());
+        Assert.Equal("my_table.\"data\"->>'Id' < 10", sqlExpression?.ToString());
     }
 
     [Fact]
@@ -51,7 +51,7 @@ public class CustomExpressionVisitorTests
         var visitor = new FilterExpressionVisitor("my_table", new TimeScaleOperatorVisitor());
         var result = visitor.Visit(filter) as LambdaExpression;
         var sqlExpression = result?.Body as SqlExpression;
-        Assert.Equal("date_trunc('day', 'my_table.CreatedAt') = '2023-01-01T00:00:00+01:00'",
+        Assert.Equal("date_trunc('day', my_table.\"data\"->>'CreatedAt') = '2023-01-01T00:00:00+01:00'",
             sqlExpression?.ToString());
     }
 
@@ -64,7 +64,7 @@ public class CustomExpressionVisitorTests
         var visitor = new FilterExpressionVisitor("my_table", new TimeScaleOperatorVisitor());
         var result = visitor.Visit(filter) as LambdaExpression;
         var sqlExpression = result?.Body as SqlExpression;
-        Assert.Equal("time_bucket(INTERVAL '1 hour', 'my_table.CreatedAt') = '2023-01-01T01:00:00Z'",
+        Assert.Equal("time_bucket(INTERVAL '1 hour', my_table.\"data\"->>'CreatedAt') = '2023-01-01T01:00:00Z'",
             sqlExpression?.ToString());
     }
 }

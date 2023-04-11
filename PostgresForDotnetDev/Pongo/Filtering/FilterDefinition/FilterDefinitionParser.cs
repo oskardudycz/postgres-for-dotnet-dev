@@ -1,11 +1,8 @@
 ﻿using System.Collections.Concurrent;
-using System.Linq.Expressions;
 using System.Text;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
-using NetTopologySuite.Geometries;
-using PostgresForDotnetDev.Pongo.Filtering.TimescaleDB;
 
 namespace PostgresForDotnetDev.Pongo.Filtering;
 
@@ -15,62 +12,10 @@ public static class FilterDefinitionParser
 
     public static string ToSqlExpression<T>(this FilterDefinition<T> filter)
     {
-        // Use a BsonDocument to access MongoDB filter elements
         var bsonFilter = filter.Render(BsonSerializer.SerializerRegistry.GetSerializer<T>(),
             BsonSerializer.SerializerRegistry);
 
-        var propertyToColumnMapping = GetMappedColumns<T>();
-        var filterBuilder = new StringBuilder();
-        filterBuilder.Append(BsonFilterToSqlExpression(bsonFilter));
-
-        // ... your existing filtering logic ...
-
-        // Check for property names in the filter and replace them with the corresponding generated column names
-        foreach (var kvp in propertyToColumnMapping)
-        {
-            var propertyName = "\"" + kvp.Key + "\"";
-            var columnName = kvp.Value;
-
-            filterBuilder.Replace(propertyName, columnName);
-        }
-
-        return filterBuilder.ToString();
-    }
-
-    public static string FilterConditionToSqlExpression<T>(Expression<Func<T, bool>> predicate, string tableName)
-    {
-        var expressionVisitor = new FilterExpressionVisitor(tableName, new TimeScaleOperatorVisitor());
-        var sqlExpression = expressionVisitor.Visit(predicate);
-        return sqlExpression.ToString();
-    }
-
-    public static string FilterConditionsToSqlExpression<T>(List<FilterCondition<T>> conditions, string tableName)
-    {
-        var filterExpressions = conditions
-            .Select(condition => FilterConditionToSqlExpression(condition.Predicate, tableName)).ToList();
-        var sqlExpression = string.Join(" AND ", filterExpressions);
-        return sqlExpression;
-    }
-
-    private static Dictionary<string, string> GetMappedColumns<T>()
-    {
-        var mappedColumns = new Dictionary<string, string>();
-
-        var properties = typeof(T).GetProperties();
-        foreach (var property in properties)
-        {
-            if (property.PropertyType == typeof(Point) || property.PropertyType == typeof(List<Point>))
-            {
-                mappedColumns.Add(property.Name, property.Name);
-            }
-            else if (property.PropertyType == typeof(DateTime) || property.PropertyType == typeof(List<DateTime>))
-            {
-                mappedColumns.Add(property.Name, property.Name);
-            }
-            // Add more conditions here for other property types
-        }
-
-        return mappedColumns;
+        return BsonFilterToSqlExpression(bsonFilter);
     }
 
     private static string BsonFilterToSqlExpression(BsonDocument filter)
