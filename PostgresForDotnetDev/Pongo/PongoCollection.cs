@@ -3,6 +3,7 @@ using MongoDB.Driver;
 using Npgsql;
 using NpgsqlTypes;
 using PostgresForDotnetDev.Core;
+using PostgresForDotnetDev.Pongo.Filtering;
 using PostgresForDotnetDev.Pongo.Filtering.TimescaleDB;
 using PostgresForDotnetDev.Pongo.Querying;
 
@@ -110,7 +111,7 @@ public class PongoCollection<T>: IPongoCollection<T>
         var sql = $"UPDATE {tableName} SET data = data || {updateExpression}::jsonb WHERE {whereClause}";
 
         await using var command = new NpgsqlCommand(sql, connection);
-        
+
         var rowsAffected = await command.ExecuteNonQueryAsync(cancellationToken);
 
         return new UpdateResult.Acknowledged(rowsAffected, rowsAffected, default);
