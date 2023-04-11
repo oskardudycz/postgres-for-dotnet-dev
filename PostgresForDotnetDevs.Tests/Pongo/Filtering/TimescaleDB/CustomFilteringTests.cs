@@ -1,4 +1,5 @@
 ﻿using System.Linq.Expressions;
+using PostgresForDotnetDev.Core.Expressions;
 using PostgresForDotnetDev.Pongo;
 using PostgresForDotnetDev.Pongo.Filtering.TimescaleDB;
 

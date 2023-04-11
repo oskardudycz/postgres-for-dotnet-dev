@@ -49,149 +49,102 @@ public static class UpdateDefinitionParser
 
     private static string BsonUpdateToSqlExpression(BsonDocument bsonUpdate)
     {
-        var operations = new List<string>();
-
-        foreach (var element in bsonUpdate)
+        var operations = bsonUpdate.SelectMany(element =>
         {
             var updateOperator = element.Name;
             var updateFields = element.Value.AsBsonDocument;
 
-            foreach (var updateField in updateFields)
-            {
-                var field = updateField.Name;
-                var value = updateField.Value;
-
-                string operation;
-
-                switch (updateOperator)
-                {
-                    case "$set":
-                        operation = $"jsonb_set(data, '{{{field}}}', {GenerateJsonValue(value)}, true)";
-                        break;
-
-                    case "$unset":
-                        operation = $"data - '{field}'";
-                        break;
-
-                    case "$inc":
-                        operation =
-                            $"jsonb_set(data, '{{{field}}}', (COALESCE((data->>'{field}')::numeric, 0) + {value})::text::jsonb, true)";
-                        break;
-
-                    case "$mul":
-                        operation =
-                            $"jsonb_set(data, '{{{field}}}', (COALESCE((data->>'{field}')::numeric, 1) * {value})::text::jsonb, true)";
-                        break;
-
-                    case "$min":
-                        operation =
-                            $"jsonb_set(data, '{{{field}}}', LEAST(COALESCE((data->>'{field}')::numeric, {value}), {value})::text::jsonb, true)";
-                        break;
-
-                    case "$max":
-                        operation =
-                            $"jsonb_set(data, '{{{field}}}', GREATEST(COALESCE((data->>'{field}')::numeric, {value}), {value})::text::jsonb, true)";
-                        break;
-
-                    case "$currentDate":
-                        if (value.BsonType == BsonType.Document && value.AsBsonDocument.Contains("$type") &&
-                            value.AsBsonDocument["$type"].AsString == "timestamp")
-                        {
-                            operation = $"jsonb_set(data, '{{{field}}}', to_jsonb(CURRENT_TIMESTAMP), true)";
-                        }
-                        else
-                        {
-                            operation = $"jsonb_set(data, '{{{field}}}', to_jsonb(CURRENT_DATE), true)";
-                        }
-
-                        break;
-
-                    case "$push":
-                        if (value.IsBsonDocument && value.AsBsonDocument.Contains("$each"))
-                        {
-                            var eachArray = value["$each"].AsBsonArray;
-                            var elements = eachArray.Select(el => el.ToString()!).ToList();
-                            var elementsJson = string.Join(", ", elements);
-                            operation =
-                                $"jsonb_set(data, '{{{field}}}', COALESCE(data->'{field}', '[]'::jsonb) || '[{elementsJson}]'::jsonb, true)";
-                        }
-                        else
-                        {
-                            operation =
-                                $"jsonb_set(data, '{{{field}}}', COALESCE(data->'{field}', '[]'::jsonb) || '[{GenerateJsonValue(value)}]'::jsonb, true)";
-                        }
-
-                        break;
-
-
-                    case "$addToSet":
-                        if (value.IsBsonDocument && value.AsBsonDocument.Contains("$each"))
-                        {
-                            var eachArray = value["$each"].AsBsonArray;
-                            var elements = eachArray.Select(el => SanitizeStringValue(el.ToString()!)).ToList();
-
-                            var elementsJson = string.Join(", ", elements);
-                            operation =
-                                $"jsonb_set(data, '{{{field}}}', (COALESCE(data->'{field}', '[]'::jsonb) || '[{elementsJson}]'::jsonb) - 'null', true)";
-                        }
-                        else
-                        {
-                            operation =
-                                $"jsonb_set(data, '{{{field}}}', (COALESCE(data->'{field}', '[]'::jsonb) || '[{GenerateJsonValue(value)}]'::jsonb) - 'null', true)";
-                        }
-
-                        break;
-
-                    case "$pop":
-                        var popValue = value.ToInt32();
-                        operation = popValue > 0
-                            ? $"jsonb_set(data, '{{{field}}}', data->'{field}' - (jsonb_array_length(data->'{field}') - 1), true)"
-                            : $"jsonb_set(data, '{{{field}}}', data->'{field}' - 0, true)";
-
-                        break;
-
-                    case "$pull":
-                        operation = $"jsonb_set(data, '{{{field}}}', data->'{field}' - '{GenerateJsonValue(value)}', true)";
-                        break;
-
-                    case "$pullAll":
-                        var pullAllArray = value.AsBsonArray;
-                        var pullAllConditions = pullAllArray.Select(el => GenerateJsonValue(el.ToString()!))
-                            .Select(sanitizedElement => $"data->'{field}' - '{sanitizedElement}'").ToList();
-
-                        operation = $"jsonb_set(data, '{{{field}}}', {string.Join(" || ", pullAllConditions)}, true)";
-                        break;
-
-                    default:
-                        throw new NotSupportedException($"Unsupported update operator: {updateOperator}");
-                }
-
-                operations.Add(operation);
-            }
-        }
+            return updateFields.Select(updateField => UpdateField(updateField, updateOperator));
+        });
 
         return string.Join(" || ", operations);
+    }
+
+    private static string UpdateField(BsonElement updateField, string updateOperator)
+    {
+        var field = updateField.Name;
+        var value = updateField.Value;
+
+        switch (updateOperator)
+        {
+            case "$set":
+                return $"jsonb_set(data, '{{{field}}}', {GenerateJsonValue(value)}, true)";
+
+            case "$unset":
+                return $"data - '{field}'";
+
+            case "$inc":
+                return
+                    $"jsonb_set(data, '{{{field}}}', (COALESCE((data->>'{field}')::numeric, 0) + {value})::text::jsonb, true)";
+
+            case "$mul":
+                return
+                    $"jsonb_set(data, '{{{field}}}', (COALESCE((data->>'{field}')::numeric, 1) * {value})::text::jsonb, true)";
+
+            case "$min":
+                return
+                    $"jsonb_set(data, '{{{field}}}', LEAST(COALESCE((data->>'{field}')::numeric, {value}), {value})::text::jsonb, true)";
+
+            case "$max":
+                return
+                    $"jsonb_set(data, '{{{field}}}', GREATEST(COALESCE((data->>'{field}')::numeric, {value}), {value})::text::jsonb, true)";
+
+            case "$currentDate":
+                return value.BsonType == BsonType.Document && value.AsBsonDocument.Contains("$type") &&
+                       value.AsBsonDocument["$type"].AsString == "timestamp"
+                    ? $"jsonb_set(data, '{{{field}}}', to_jsonb(CURRENT_TIMESTAMP), true)"
+                    : $"jsonb_set(data, '{{{field}}}', to_jsonb(CURRENT_DATE), true)";
+
+            case "$push":
+                if (value.IsBsonDocument && value.AsBsonDocument.Contains("$each"))
+                {
+                    var eachArray = value["$each"].AsBsonArray;
+                    var elements = eachArray.Select(el => el.ToString()!).ToList();
+                    var elementsJson = string.Join(", ", elements);
+                    return
+                        $"jsonb_set(data, '{{{field}}}', COALESCE(data->'{field}', '[]'::jsonb) || '[{elementsJson}]'::jsonb, true)";
+                }
+                return
+                    $"jsonb_set(data, '{{{field}}}', COALESCE(data->'{field}', '[]'::jsonb) || '[{GenerateJsonValue(value)}]'::jsonb, true)";
+
+
+            case "$addToSet":
+                if (value.IsBsonDocument && value.AsBsonDocument.Contains("$each"))
+                {
+                    var eachArray = value["$each"].AsBsonArray;
+                    var elements = eachArray.Select(el => SanitizeStringValue(el.ToString()!)).ToList();
+
+                    var elementsJson = string.Join(", ", elements);
+                    return
+                        $"jsonb_set(data, '{{{field}}}', (COALESCE(data->'{field}', '[]'::jsonb) || '[{elementsJson}]'::jsonb) - 'null', true)";
+                }
+
+                return
+                    $"jsonb_set(data, '{{{field}}}', (COALESCE(data->'{field}', '[]'::jsonb) || '[{GenerateJsonValue(value)}]'::jsonb) - 'null', true)";
+
+            case "$pop":
+                var popValue = value.ToInt32();
+                return popValue > 0
+                    ? $"jsonb_set(data, '{{{field}}}', data->'{field}' - (jsonb_array_length(data->'{field}') - 1), true)"
+                    : $"jsonb_set(data, '{{{field}}}', data->'{field}' - 0, true)";
+
+            case "$pull":
+                return $"jsonb_set(data, '{{{field}}}', data->'{field}' - '{GenerateJsonValue(value)}', true)";
+
+            case "$pullAll":
+                var pullAllArray = value.AsBsonArray;
+                var pullAllConditions = pullAllArray.Select(el => GenerateJsonValue(el.ToString()!))
+                    .Select(sanitizedElement => $"data->'{field}' - '{sanitizedElement}'").ToList();
+
+                return $"jsonb_set(data, '{{{field}}}', {string.Join(" || ", pullAllConditions)}, true)";
+
+            default:
+                throw new NotSupportedException($"Unsupported update operator: {updateOperator}");
+        }
     }
 
     private static string SanitizeStringValue(string input)
     {
         return input.Replace("'", "''");
     }
-}
-
-public class SqlExpression: Expression
-{
-    public string Sql { get; }
-
-    public SqlExpression(string sql, Type? type = null)
-    {
-        Sql = sql;
-        Type = type ?? typeof(string);
-    }
-
-    public override Type Type { get; }
-
-    public override ExpressionType NodeType => ExpressionType.Extension;
-
-    public override string ToString() => Sql;
 }
