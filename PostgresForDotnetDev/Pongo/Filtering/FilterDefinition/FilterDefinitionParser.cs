@@ -8,8 +8,6 @@ namespace PostgresForDotnetDev.Pongo.Filtering;
 
 public static class FilterDefinitionParser
 {
-    private static ConcurrentDictionary<string, FilterExpressionVisitor> visitors = new();
-
     public static string ToSqlExpression<T>(this FilterDefinition<T> filter)
     {
         var bsonFilter = filter.Render(BsonSerializer.SerializerRegistry.GetSerializer<T>(),
@@ -39,10 +37,8 @@ public static class FilterDefinitionParser
         return string.Join(" AND ", conditionsList);
     }
 
-    private static string BsonValueToSqlLiteral(BsonValue value)
-    {
-        return (value.IsString ? $"'{value.AsString.Replace("'", "''")}'" : value.ToString())!;
-    }
+    private static string BsonValueToSqlLiteral(BsonValue value) =>
+        (value.IsString ? $"'{value.AsString.Replace("'", "''")}'" : value.ToString())!;
 
     private static string ProcessQueryOperator(string field, string operatorName, BsonValue value)
     {

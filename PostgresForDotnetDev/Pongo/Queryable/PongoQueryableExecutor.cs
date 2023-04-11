@@ -27,7 +27,7 @@ public class PongoQueryableExecutor
         var itemType = !type.IsGenericType ? type : type.GetGenericArguments()[0];
         var tableName = getTableName(itemType);
 
-        var whereClause = WhereClause.Get<TResult>(tableName, expression);
+        var whereClause = WhereClause.Get(tableName, expression);
 
         var sql = $"SELECT data FROM {tableName} WHERE {whereClause}";
 

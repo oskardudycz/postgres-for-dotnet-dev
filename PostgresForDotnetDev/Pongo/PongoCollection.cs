@@ -97,10 +97,8 @@ public class PongoCollection<T>: IPongoCollection<T>
         return new DeleteResult.Acknowledged(rowsAffected);
     }
 
-    public IQueryable<T> AsQueryable()
-    {
-        return new PongoQueryable<T>(
+    public IQueryable<T> AsQueryable() =>
+        new PongoQueryable<T>(
             new PongoQueryableProvider(new PongoQueryableExecutor(connection, PongoCollectionName.For))
         );
-    }
 }

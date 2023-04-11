@@ -1,6 +1,5 @@
 ﻿using System.Linq.Expressions;
 using System.Reflection;
-using PostgresForDotnetDev.Pongo;
 
 namespace PostgresForDotnetDev.Core.Expressions;
 
@@ -23,18 +22,6 @@ public static class ExpressionExtensions
             default:
                 throw new ArgumentException("Invalid argument type.");
         }
-    }
-
-    public static Type GetQueryableElementType(this Expression expression)
-    {
-        Type enumerableType = expression.Type;
-
-        if (enumerableType.IsGenericType && enumerableType.GetGenericTypeDefinition() == typeof(IQueryable<>))
-        {
-            return enumerableType.GetGenericArguments()[0];
-        }
-
-        throw new ArgumentException("The provided expression does not represent an IQueryable.", nameof(expression));
     }
 
     public static string UnwrapSqlExpression(this Expression expression)
