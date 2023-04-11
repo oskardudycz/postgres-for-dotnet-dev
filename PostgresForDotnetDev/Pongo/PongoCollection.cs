@@ -1,7 +1,6 @@
 ﻿using System.Text.Json;
 using MongoDB.Driver;
 using Npgsql;
-using NpgsqlTypes;
 using PostgresForDotnetDev.Core;
 using PostgresForDotnetDev.Pongo.Collections;
 using PostgresForDotnetDev.Pongo.Filtering;

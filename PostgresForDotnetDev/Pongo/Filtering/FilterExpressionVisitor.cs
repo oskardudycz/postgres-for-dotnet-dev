@@ -1,4 +1,5 @@
 ﻿using System.Linq.Expressions;
+using System.Reflection;
 using MongoDB.Bson;
 using MongoDB.Driver.GeoJsonObjectModel;
 using PostgresForDotnetDev.Core.Expressions;
@@ -67,8 +68,56 @@ public class FilterExpressionVisitor: ExpressionVisitor
         return new SqlExpression(sqlExpression, typeof(bool));
     }
 
-    protected override Expression VisitMember(MemberExpression node) =>
-        new SqlExpression($"'{tableName}.{node.Member.Name}'");
+    protected override Expression VisitMember(MemberExpression node)
+    {
+        if ((node.Member.MemberType != MemberTypes.Property && node.Member.MemberType != MemberTypes.Field))
+            return base.VisitMember(node);
+
+        // Check if the expression is a closure accessing a local variable
+        if (node.Expression is MemberExpression { Expression: ConstantExpression constantExpression } innerMemberExpression)
+        {
+            object closureInstance = constantExpression.Value!;
+
+            object? documentInstance = innerMemberExpression.Member switch
+            {
+                PropertyInfo propertyInfo => propertyInfo.GetValue(closureInstance),
+                FieldInfo fieldInfo => fieldInfo.GetValue(closureInstance),
+                _ => null
+            };
+
+            if (documentInstance != null)
+            {
+                object value;
+
+                switch (node.Member)
+                {
+                    case PropertyInfo propertyInfo:
+                        value = propertyInfo.GetValue(documentInstance)!;
+                        break;
+                    case FieldInfo fieldInfo:
+                        value = fieldInfo.GetValue(documentInstance)!;
+                        break;
+                    default:
+                        return base.VisitMember(node);
+                }
+
+                return new SqlExpression(FormatConstant(value), node.Type);
+            }
+        }
+
+        string jsonbExpression = BuildJsonbExpression(node, "data");
+        return new SqlExpression($"{tableName}.\"{jsonbExpression}\"");
+    }
+
+    private static string BuildJsonbExpression(MemberExpression node, string currentExpression)
+    {
+        if (node.Expression is MemberExpression innerMemberExpression)
+        {
+            currentExpression = BuildJsonbExpression(innerMemberExpression, currentExpression);
+        }
+
+        return $"{currentExpression}->>'{node.Member.Name}'";
+    }
 
     protected override Expression VisitConstant(ConstantExpression node) =>
         new SqlExpression(FormatConstant(node.Value));
@@ -85,7 +134,8 @@ public class FilterExpressionVisitor: ExpressionVisitor
                 ? $"'{date.ToString("yyyy-MM-ddTHH:mm:ss'Z'")}'"
                 : $"'{date.ToString("yyyy-MM-ddTHH:mm:sszzz")}'",
             BsonDocument bsonDoc => $"'{bsonDoc.ToJson().Replace("'", "''")}'::jsonb",
-            GeoJson2DGeographicCoordinates coordinates => $"ST_SetSRID(ST_Point({coordinates.Longitude}, {coordinates.Latitude}), 4326)",
+            GeoJson2DGeographicCoordinates coordinates =>
+                $"ST_SetSRID(ST_Point({coordinates.Longitude}, {coordinates.Latitude}), 4326)",
             _ => value.ToString()!
         };
     }
@@ -96,10 +146,6 @@ public class FilterExpressionVisitor: ExpressionVisitor
         return Expression.Lambda(body, node.Parameters);
     }
 
-    protected override Expression VisitMethodCall(MethodCallExpression node)
-    {
-        if (node.Method.DeclaringType != typeof(TimescaleDbFunctions)) return base.VisitMethodCall(node);
-
-        return new TimeScaleOperatorVisitor().Visit(node, Visit) ?? base.VisitMethodCall(node);
-    }
+    protected override Expression VisitMethodCall(MethodCallExpression node) =>
+        compositeCustomOperatorVisitor.Visit(node, Visit) ?? base.VisitMethodCall(node);
 }

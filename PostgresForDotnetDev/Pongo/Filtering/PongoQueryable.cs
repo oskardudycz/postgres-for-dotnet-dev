@@ -61,7 +61,7 @@ public class PongoQueryableExecutor
     {
         var tableName = getTableName(typeof(TResult));
 
-        var whereClause = new FilterExpressionVisitor(tableName, new TimeScaleOperatorVisitor());
+        var whereClause = WhereClause.Get<TResult>(tableName, expression);
 
         var sql = $"SELECT data FROM {tableName} WHERE {whereClause}";
         using var command = new NpgsqlCommand(sql, connection);

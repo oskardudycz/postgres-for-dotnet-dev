@@ -78,8 +78,11 @@ public class PostgresJsonCollectionTests
         //Act
         var foundDocument = await (await collection.FindAsync<TestData>(filter)).FirstAsync();
 
+        var foundDocumentThroughLinq = collection.AsQueryable().FirstOrDefault(x => x._id == document._id);
+
         // Assert
         Assert.NotNull(foundDocument);
+        Assert.NotNull(foundDocumentThroughLinq);
         Assert.Equal(document._id, foundDocument._id);
         Assert.Equal(document.Name, foundDocument.Name);
     }

@@ -1,5 +1,6 @@
 ﻿using System.Linq.Expressions;
 using System.Reflection;
+using PostgresForDotnetDev.Pongo;
 
 namespace PostgresForDotnetDev.Core.Expressions;
 
@@ -34,5 +35,35 @@ public static class ExpressionExtensions
         }
 
         throw new ArgumentException("The provided expression does not represent an IQueryable.", nameof(expression));
+    }
+
+    public static string UnwrapSqlExpression(this Expression expression)
+    {
+        LambdaExpression? lambdaExpression = null;
+
+        switch (expression)
+        {
+            case UnaryExpression { Operand: LambdaExpression unaryLambdaExpression }:
+                lambdaExpression = unaryLambdaExpression;
+                break;
+            case LambdaExpression visitedLambdaExpression:
+                lambdaExpression = visitedLambdaExpression;
+                break;
+            default:
+            {
+                if (expression.NodeType == ExpressionType.Quote && expression is UnaryExpression { Operand: LambdaExpression quoteLambdaExpression })
+                {
+                    lambdaExpression = quoteLambdaExpression;
+                }
+                break;
+            }
+        }
+
+        if (lambdaExpression?.Body is not SqlExpression sqlExpression)
+        {
+            throw new InvalidOperationException("Invalid Expression!");
+        }
+
+        return sqlExpression.Sql;
     }
 }
