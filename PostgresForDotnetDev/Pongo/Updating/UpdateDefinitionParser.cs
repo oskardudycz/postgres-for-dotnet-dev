@@ -1,6 +1,4 @@
 ﻿using System.Collections;
-using System.Drawing;
-using System.Linq.Expressions;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
@@ -96,31 +94,15 @@ public static class UpdateDefinitionParser
                     : $"jsonb_set(data, '{{{field}}}', to_jsonb(CURRENT_DATE), true)";
 
             case "$push":
-                if (value.IsBsonDocument && value.AsBsonDocument.Contains("$each"))
-                {
-                    var eachArray = value["$each"].AsBsonArray;
-                    var elements = eachArray.Select(el => el.ToString()!).ToList();
-                    var elementsJson = string.Join(", ", elements);
-                    return
-                        $"jsonb_set(data, '{{{field}}}', COALESCE(data->'{field}', '[]'::jsonb) || '[{elementsJson}]'::jsonb, true)";
-                }
-                return
-                    $"jsonb_set(data, '{{{field}}}', COALESCE(data->'{field}', '[]'::jsonb) || '[{GenerateJsonValue(value)}]'::jsonb, true)";
+                return (value.IsBsonDocument && value.AsBsonDocument.Contains("$each"))
+                    ? $"jsonb_set(data, '{{{field}}}', COALESCE(data->'{field}', '[]'::jsonb) || '[{EachToElements(value)}]'::jsonb, true)"
+                    : $"jsonb_set(data, '{{{field}}}', COALESCE(data->'{field}', '[]'::jsonb) || '[{GenerateJsonValue(value)}]'::jsonb, true)";
 
 
             case "$addToSet":
-                if (value.IsBsonDocument && value.AsBsonDocument.Contains("$each"))
-                {
-                    var eachArray = value["$each"].AsBsonArray;
-                    var elements = eachArray.Select(el => SanitizeStringValue(el.ToString()!)).ToList();
-
-                    var elementsJson = string.Join(", ", elements);
-                    return
-                        $"jsonb_set(data, '{{{field}}}', (COALESCE(data->'{field}', '[]'::jsonb) || '[{elementsJson}]'::jsonb) - 'null', true)";
-                }
-
-                return
-                    $"jsonb_set(data, '{{{field}}}', (COALESCE(data->'{field}', '[]'::jsonb) || '[{GenerateJsonValue(value)}]'::jsonb) - 'null', true)";
+                return (value.IsBsonDocument && value.AsBsonDocument.Contains("$each"))
+                    ? $"jsonb_set(data, '{{{field}}}', (COALESCE(data->'{field}', '[]'::jsonb) || '[{EachToElements(value)}]'::jsonb) - 'null', true)"
+                    : $"jsonb_set(data, '{{{field}}}', (COALESCE(data->'{field}', '[]'::jsonb) || '[{GenerateJsonValue(value)}]'::jsonb) - 'null', true)";
 
             case "$pop":
                 var popValue = value.ToInt32();
@@ -132,15 +114,29 @@ public static class UpdateDefinitionParser
                 return $"jsonb_set(data, '{{{field}}}', data->'{field}' - '{GenerateJsonValue(value)}', true)";
 
             case "$pullAll":
-                var pullAllArray = value.AsBsonArray;
-                var pullAllConditions = pullAllArray.Select(el => GenerateJsonValue(el.ToString()!))
-                    .Select(sanitizedElement => $"data->'{field}' - '{sanitizedElement}'").ToList();
-
-                return $"jsonb_set(data, '{{{field}}}', {string.Join(" || ", pullAllConditions)}, true)";
+                return $"jsonb_set(data, '{{{field}}}', {string.Join(" || ", PullAllConditions(value, field))}, true)";
 
             default:
                 throw new NotSupportedException($"Unsupported update operator: {updateOperator}");
         }
+    }
+
+    private static List<string> PullAllConditions(BsonValue value, string field)
+    {
+        var pullAllArray = value.AsBsonArray;
+        var pullAllConditions = pullAllArray.Select(el => GenerateJsonValue(el.ToString()!))
+            .Select(sanitizedElement => $"data->'{field}' - '{sanitizedElement}'").ToList();
+
+        return pullAllConditions;
+    }
+
+    private static string EachToElements(BsonValue value)
+    {
+        var eachArray = value["$each"].AsBsonArray;
+        var elements = eachArray.Select(el => el.ToString()!).ToList();
+        var elementsJson = string.Join(", ", elements);
+
+        return elementsJson;
     }
 
     private static string SanitizeStringValue(string input)
