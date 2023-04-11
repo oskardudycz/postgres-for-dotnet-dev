@@ -1,18 +1,20 @@
 ﻿using System.Linq.Expressions;
-using System.Reflection;
-using System.Text;
+using MongoDB.Bson;
+using MongoDB.Driver.GeoJsonObjectModel;
+using PostgresForDotnetDev.Core.Expressions;
 using PostgresForDotnetDev.Pongo.Filtering.TimescaleDB;
-using PostgresForDotnetDev.TimescaleDB;
 
 namespace PostgresForDotnetDev.Pongo;
 
 public class FilterExpressionVisitor: ExpressionVisitor
 {
     private readonly string tableName;
+    private readonly CompositeCustomOperatorVisitor compositeCustomOperatorVisitor;
 
-    public FilterExpressionVisitor(string tableName)
+    public FilterExpressionVisitor(string tableName, CompositeCustomOperatorVisitor compositeCustomOperatorVisitor)
     {
         this.tableName = tableName;
+        this.compositeCustomOperatorVisitor = compositeCustomOperatorVisitor;
     }
 
     protected override Expression VisitBinary(BinaryExpression node)
@@ -58,7 +60,6 @@ public class FilterExpressionVisitor: ExpressionVisitor
             _ => throw new NotSupportedException($"The binary operator '{node.NodeType}' is not supported")
         };
 
-
         // Build the SQL expression
         string leftSql = left is SqlExpression expression1 ? expression1.Sql : FormatConstant(left);
         string rightSql = right is SqlExpression expression ? expression.Sql : FormatConstant(right);
@@ -83,6 +84,8 @@ public class FilterExpressionVisitor: ExpressionVisitor
             DateTimeOffset date => date.Offset == TimeSpan.Zero
                 ? $"'{date.ToString("yyyy-MM-ddTHH:mm:ss'Z'")}'"
                 : $"'{date.ToString("yyyy-MM-ddTHH:mm:sszzz")}'",
+            BsonDocument bsonDoc => $"'{bsonDoc.ToJson().Replace("'", "''")}'::jsonb",
+            GeoJson2DGeographicCoordinates coordinates => $"ST_SetSRID(ST_Point({coordinates.Longitude}, {coordinates.Latitude}), 4326)",
             _ => value.ToString()!
         };
     }
@@ -97,6 +100,6 @@ public class FilterExpressionVisitor: ExpressionVisitor
     {
         if (node.Method.DeclaringType != typeof(TimescaleDbFunctions)) return base.VisitMethodCall(node);
 
-        return new CompositeTimescaleDbFunction().Visit(node, Visit) ?? base.VisitMethodCall(node);
+        return new TimeScaleOperatorVisitor().Visit(node, Visit) ?? base.VisitMethodCall(node);
     }
 }

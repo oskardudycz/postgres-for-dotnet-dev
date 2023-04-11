@@ -4,18 +4,18 @@ using Npgsql;
 
 namespace PostgresForDotnetDev.Pongo.Querying;
 
-public class PongoAsyncCursor<T> : IAsyncCursor<T>
+public class PongoCursor<T> : IAsyncCursor<T>
 {
-    private readonly NpgsqlDataReader _reader;
-    private List<T> _currentBatch;
+    private readonly NpgsqlDataReader reader;
+    private readonly List<T> currentBatch;
 
-    public PongoAsyncCursor(NpgsqlDataReader reader)
+    public PongoCursor(NpgsqlDataReader reader)
     {
-        _reader = reader;
-        _currentBatch = new List<T>();
+        this.reader = reader;
+        currentBatch = new List<T>();
     }
 
-    public IEnumerable<T> Current => _currentBatch;
+    public IEnumerable<T> Current => currentBatch;
 
     public bool MoveNext(CancellationToken cancellationToken = default)
     {
@@ -24,13 +24,13 @@ public class PongoAsyncCursor<T> : IAsyncCursor<T>
 
     public async Task<bool> MoveNextAsync(CancellationToken cancellationToken = default)
     {
-        _currentBatch.Clear();
+        currentBatch.Clear();
 
-        while (await _reader.ReadAsync(cancellationToken))
+        while (await reader.ReadAsync(cancellationToken))
         {
-            var json = _reader.GetString(0);
+            var json = reader.GetString(0);
             var document = JsonSerializer.Deserialize<T>(json)!;
-            _currentBatch.Add(document);
+            currentBatch.Add(document);
 
             // Break if the cancellationToken is requested
             if (cancellationToken.IsCancellationRequested)
@@ -39,12 +39,12 @@ public class PongoAsyncCursor<T> : IAsyncCursor<T>
             }
         }
 
-        return _currentBatch.Count > 0;
+        return currentBatch.Count > 0;
     }
 
     public void Dispose()
     {
-        _reader.Dispose();
+        reader.Dispose();
     }
 }
 

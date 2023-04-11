@@ -1,4 +1,5 @@
-﻿using System.Linq.Expressions;
+﻿using System.Collections.Concurrent;
+using System.Linq.Expressions;
 using System.Text;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
@@ -10,16 +11,10 @@ namespace PostgresForDotnetDev.Pongo.Filtering;
 
 public static class FilterDefinitionParser
 {
+    private static ConcurrentDictionary<string, FilterExpressionVisitor> visitors = new();
 
     public static string ToSqlExpression<T>(this FilterDefinition<T> filter)
     {
-        if (filter is NearFilterOperator nearFilter)
-        {
-            var locationColumnName = nearFilter.PropertyName;
-            return
-                $"ST_DWithin({locationColumnName}, ST_SetSRID(ST_MakePoint(@Longitude, @Latitude), 4326), @Distance)";
-        }
-
         // Use a BsonDocument to access MongoDB filter elements
         var bsonFilter = filter.Render(BsonSerializer.SerializerRegistry.GetSerializer<T>(),
             BsonSerializer.SerializerRegistry);
@@ -44,7 +39,7 @@ public static class FilterDefinitionParser
 
     public static string FilterConditionToSqlExpression<T>(Expression<Func<T, bool>> predicate, string tableName)
     {
-        var expressionVisitor = new FilterExpressionVisitor(tableName);
+        var expressionVisitor = new FilterExpressionVisitor(tableName, new TimeScaleOperatorVisitor());
         var sqlExpression = expressionVisitor.Visit(predicate);
         return sqlExpression.ToString();
     }

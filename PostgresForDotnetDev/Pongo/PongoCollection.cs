@@ -3,6 +3,7 @@ using MongoDB.Driver;
 using Npgsql;
 using NpgsqlTypes;
 using PostgresForDotnetDev.Core;
+using PostgresForDotnetDev.Pongo.Collections;
 using PostgresForDotnetDev.Pongo.Filtering;
 using PostgresForDotnetDev.Pongo.Filtering.TimescaleDB;
 using PostgresForDotnetDev.Pongo.Querying;
@@ -55,7 +56,7 @@ public class PongoCollection<T>: IPongoCollection<T>
 
         var reader = await command.ExecuteReaderAsync(cancellationToken);
 
-        return new PongoAsyncCursor<TProjection>(reader);
+        return new PongoCursor<TProjection>(reader);
     }
 
     public async Task InsertOneAsync(
@@ -127,5 +128,12 @@ public class PongoCollection<T>: IPongoCollection<T>
     public Task<DeleteResult> DeleteOneAsync(FilterDefinition<T> filter, CancellationToken cancellationToken = default)
     {
         throw new NotImplementedException();
+    }
+
+    public IQueryable<T> AsQueryable()
+    {
+        return new PongoQueryable<T>(
+            new PongoQueryableProvider(new PongoQueryableExecutor(connection, PongoCollectionName.For))
+        );
     }
 }

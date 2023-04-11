@@ -31,4 +31,6 @@ public interface IPongoCollection<T>
     Task<DeleteResult> DeleteOneAsync(
         FilterDefinition<T> filter,
         CancellationToken cancellationToken = default);
+
+    IQueryable<T> AsQueryable();
 }
