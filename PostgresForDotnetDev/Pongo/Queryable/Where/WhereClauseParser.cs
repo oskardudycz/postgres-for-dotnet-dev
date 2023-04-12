@@ -1,14 +1,15 @@
 ﻿using System.Linq.Expressions;
 using PostgresForDotnetDev.Core.Expressions;
+using PostgresForDotnetDev.Core.Expressions.Where;
 using PostgresForDotnetDev.Pongo.Filtering.TimescaleDB;
 
 namespace PostgresForDotnetDev.Pongo.Filtering;
 
 public static class WhereClause
 {
-    public static string Get(string tableName, Expression expression)
+    public static string Parse(string tableName, Expression expression)
     {
-        var whereExpressions = new FilterCriteriaExtractor().GetCriteriaExpressions(expression);
+        var whereExpressions = new WhereClauseExtractor().GetCriteriaExpressions(expression);
 
         if (!whereExpressions.Any())
             return "1=1";

@@ -1,9 +1,9 @@
 ﻿using System.Linq.Expressions;
 using ExpressionVisitor = MongoDB.Bson.Serialization.ExpressionVisitor;
 
-namespace PostgresForDotnetDev.Core.Expressions;
+namespace PostgresForDotnetDev.Core.Expressions.Where;
 
-public class FilterCriteriaExtractor : ExpressionVisitor
+public class WhereClauseExtractor : ExpressionVisitor
 {
     private readonly List<Expression> criteriaExpressions = new();
 

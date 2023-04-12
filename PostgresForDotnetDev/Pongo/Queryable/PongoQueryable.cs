@@ -8,12 +8,16 @@ namespace PostgresForDotnetDev.Pongo.Filtering;
 
 public class PongoQueryable<T>: QueryableBase<T>
 {
-    public PongoQueryable(PongoQueryableProvider provider): base(provider)
+    public PongoQueryable(IQueryProvider provider): base(provider)
+    {
+    }
+
+    public PongoQueryable(IQueryProvider provider, Expression expression): base(provider, expression)
     {
     }
 }
 
-public class PongoQueryableProvider: IQueryProvider
+public class PongoQueryableProvider<TSource>: IQueryProvider
 {
     private readonly PongoQueryableExecutor executor;
 
@@ -21,14 +25,14 @@ public class PongoQueryableProvider: IQueryProvider
         this.executor = executor;
 
     public IQueryable CreateQuery(Expression expression) =>
-        throw new NotSupportedException();
+        new PongoQueryable<TSource>(this, expression);
 
-    public IQueryable<TElement> CreateQuery<TElement>(Expression _) =>
-        throw new NotSupportedException();
+    public IQueryable<TElement> CreateQuery<TElement>(Expression expression) =>
+        new PongoQueryable<TElement>(this, expression);
 
     public object Execute(Expression expression) =>
         throw new NotSupportedException();
 
     public TResult Execute<TResult>(Expression expression) =>
-        executor.Execute<TResult>(expression)!;
+        executor.Execute<TSource, TResult>(expression)!;
 }

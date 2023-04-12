@@ -26,6 +26,9 @@ public static class ExpressionExtensions
 
     public static string UnwrapSqlExpression(this Expression expression)
     {
+        if (expression is SqlExpression expression1)
+            return expression1.Sql;
+
         LambdaExpression? lambdaExpression = null;
 
         switch (expression)

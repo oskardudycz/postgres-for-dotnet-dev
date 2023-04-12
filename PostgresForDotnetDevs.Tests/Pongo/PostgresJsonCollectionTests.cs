@@ -1,6 +1,7 @@
 ﻿using Dapper;
 using FluentAssertions;
 using MongoDB.Driver;
+using MongoDB.Driver.Linq;
 using Npgsql;
 using PostgresForDotnetDev.Pongo;
 using PostgresForDotnetDevs.Tests.Core;
@@ -74,6 +75,7 @@ public class PostgresJsonCollectionTests
         await collection.InsertOneAsync(document);
 
         //Act
+        var name = collection.AsQueryable().Where(x => x._id == document._id).Select(e => new { id = e._id, e.Name} ).ToArray();
         var foundDocument = collection.AsQueryable().FirstOrDefault(x => x._id == document._id);
         var foundDocument2 = collection.AsQueryable().ToList();
         var foundDocument3 = collection.AsQueryable().ToArray();

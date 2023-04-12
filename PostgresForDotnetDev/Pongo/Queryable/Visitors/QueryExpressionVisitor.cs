@@ -138,6 +138,50 @@ public class QueryExpressionVisitor: ExpressionVisitor
         return Expression.Lambda(body, node.Parameters);
     }
 
-    protected override Expression VisitMethodCall(MethodCallExpression node) =>
-        compositeCustomOperatorVisitor.Visit(node, Visit) ?? base.VisitMethodCall(node);
+    protected override Expression VisitMethodCall(MethodCallExpression node)
+    {
+        if (node.Method.DeclaringType == typeof(Enumerable) && node.Method.Name == "Select")
+        {
+            return VisitSelectMethodCall(node);
+        }
+
+        return compositeCustomOperatorVisitor.Visit(node, Visit) ?? base.VisitMethodCall(node);
+    }
+
+    private Expression VisitSelectMethodCall(MethodCallExpression node)
+    {
+        if (node.Arguments.Count != 2)
+        {
+            throw new NotSupportedException("Only Enumerable.Select() with a single selector is supported.");
+        }
+
+        if (node.Arguments[1] is not UnaryExpression unaryExpression ||
+            unaryExpression.Operand is not LambdaExpression lambdaExpression)
+        {
+            throw new NotSupportedException("The argument for Enumerable.Select() must be a lambda expression.");
+        }
+
+        // Traverse the expression inside the Select() method call
+        Expression body = Visit(lambdaExpression.Body);
+
+        if (body is not MemberInitExpression memberInitExpression)
+        {
+            throw new NotSupportedException("The body of the lambda expression inside Enumerable.Select() must be a member initialization expression.");
+        }
+
+        var selectedProperties = new List<string>();
+        foreach (MemberAssignment binding in memberInitExpression.Bindings)
+        {
+            if (binding.Expression is not SqlExpression sqlExpression)
+            {
+                throw new NotSupportedException("The value of the member assignment inside Enumerable.Select() must be an SQL expression.");
+            }
+
+            selectedProperties.Add($"{sqlExpression.Sql} as {binding.Member.Name}");
+        }
+
+        string jsonbExpression = $"jsonb_array_elements({tableName}.data->'{((MemberExpression)node.Arguments[0]).Member.Name}')";
+        string projection = string.Join(", ", selectedProperties);
+        return new SqlExpression($"{jsonbExpression} || jsonb_build_object({projection})", typeof(object));
+    }
 }

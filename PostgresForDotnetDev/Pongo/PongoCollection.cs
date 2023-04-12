@@ -99,6 +99,6 @@ public class PongoCollection<T>: IPongoCollection<T>
 
     public IQueryable<T> AsQueryable() =>
         new PongoQueryable<T>(
-            new PongoQueryableProvider(new PongoQueryableExecutor(connection, PongoCollectionName.For))
+            new PongoQueryableProvider<T>(new PongoQueryableExecutor(connection, PongoCollectionName.For))
         );
 }

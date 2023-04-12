@@ -11,6 +11,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "CI", "CI", "{FEA59E58-EE91-
 		docker-compose.yml = docker-compose.yml
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PostgresForDotnetDev.CLI", "PostgresForDotnetDev.CLI\PostgresForDotnetDev.CLI.csproj", "{259DC7E1-C1FD-474A-A2F1-00071807B85D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -29,5 +31,9 @@ Global
 		{3DF10ABD-1720-4E54-8DD0-DB8D5CE93185}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3DF10ABD-1720-4E54-8DD0-DB8D5CE93185}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{3DF10ABD-1720-4E54-8DD0-DB8D5CE93185}.Release|Any CPU.Build.0 = Release|Any CPU
+		{259DC7E1-C1FD-474A-A2F1-00071807B85D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{259DC7E1-C1FD-474A-A2F1-00071807B85D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{259DC7E1-C1FD-474A-A2F1-00071807B85D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{259DC7E1-C1FD-474A-A2F1-00071807B85D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
