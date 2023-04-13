@@ -31,8 +31,8 @@ var slotName = "trips_slot" + Guid.NewGuid().ToString().Replace("-", "");
 var dataMapper = new FlatObjectMapper<TripRecord>(NameTransformations.FromPostgres);
 
 var subscriptionOptions =
-    new EventsSubscriptionOptions(Settings.ConnectionString, slotName, "events_pub", "trips", dataMapper);
-var subscription = new EventsSubscription();
+    new SubscriptionOptions(Settings.ConnectionString, slotName, "events_pub", "trips", dataMapper);
+var subscription = new Subscription();
 
 await foreach (var readEvent in subscription.Subscribe(subscriptionOptions, ct: ct))
 {
