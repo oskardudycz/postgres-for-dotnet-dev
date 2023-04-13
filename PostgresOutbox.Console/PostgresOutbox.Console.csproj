@@ -11,4 +11,8 @@
       <ProjectReference Include="..\PostgresOutbox\PostgresOutbox.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+      <PackageReference Include="NetTopologySuite.IO.GeoJSON4STJ" Version="3.0.0" />
+      <PackageReference Include="Npgsql.NetTopologySuite" Version="7.0.2" />
+    </ItemGroup>
 </Project>

@@ -1,7 +1,6 @@
 ﻿using Dapper;
 using FluentAssertions;
 using MongoDB.Driver;
-using MongoDB.Driver.Linq;
 using Npgsql;
 using PostgresForDotnetDev.Pongo;
 using PostgresForDotnetDevs.Tests.Core;

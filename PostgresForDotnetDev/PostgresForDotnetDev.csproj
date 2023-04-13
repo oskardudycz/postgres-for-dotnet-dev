@@ -9,7 +9,7 @@
     <ItemGroup>
       <PackageReference Include="Dapper" Version="2.0.123" />
       <PackageReference Include="MongoDB.Driver" Version="2.19.1" />
-      <PackageReference Include="NetTopologySuite.IO.PostGis" Version="2.1.0" />
+      <PackageReference Include="Npgsql.NetTopologySuite" Version="7.0.2" />
       <PackageReference Include="Npgsql" Version="7.0.2" />
       <PackageReference Include="Remotion.Linq" Version="2.2.0" />
       <PackageReference Include="Spectre.Console" Version="0.46.0" />

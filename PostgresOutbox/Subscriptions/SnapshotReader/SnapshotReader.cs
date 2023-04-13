@@ -2,6 +2,7 @@
 using Npgsql;
 using PostgresOutbox.Database;
 using PostgresOutbox.Serialization;
+using PostgresOutbox.Subscriptions.Replication;
 
 namespace PostgresOutbox.Subscriptions.SnapshotReader;
 
@@ -11,23 +12,13 @@ public static class SnapshotReader
         this NpgsqlConnection connection,
         string snapshotName,
         string tableName,
-        Func<NpgsqlDataReader, CancellationToken, Task<object>>? mapRecord = null,
+        IReplicationDataMapper dataMapper,
         [EnumeratorCancellation] CancellationToken ct = default
     )
     {
-        await foreach (var @event in connection.QueryTransactionSnapshot(snapshotName, tableName, mapRecord ?? MapToEvent, ct))
+        await foreach (var @event in connection.QueryTransactionSnapshot(snapshotName, tableName, dataMapper, ct))
         {
             yield return @event;
         }
-    }
-
-    private static async Task<object> MapToEvent(NpgsqlDataReader reader, CancellationToken ct)
-    {
-        var eventTypeName = reader.GetString(1);
-        var eventType = Reflection.GetType.ByName(eventTypeName);
-
-        var @event = await JsonSerialization.FromJsonAsync(eventType, await reader.GetStreamAsync(2, ct), ct);
-
-        return @event!;
     }
 }

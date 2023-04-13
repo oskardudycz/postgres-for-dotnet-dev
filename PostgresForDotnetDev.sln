@@ -9,7 +9,6 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "CI", "CI", "{FEA59E58-EE91-4AA9-BD84-5BAD32FD2904}"
 	ProjectSection(SolutionItems) = preProject
 		docker-compose.yml = docker-compose.yml
-		postgresql.conf = postgresql.conf
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PostgresForDotnetDev.CLI", "PostgresForDotnetDev.CLI\PostgresForDotnetDev.CLI.csproj", "{259DC7E1-C1FD-474A-A2F1-00071807B85D}"

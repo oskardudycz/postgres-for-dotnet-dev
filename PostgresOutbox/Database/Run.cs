@@ -1,6 +1,7 @@
 ﻿using System.Data;
 using System.Runtime.CompilerServices;
 using Npgsql;
+using PostgresOutbox.Subscriptions.Replication;
 
 namespace PostgresOutbox.Database;
 
@@ -38,7 +39,7 @@ public static class Run
         this NpgsqlConnection connection,
         string snapshotName,
         string tableName,
-        Func<NpgsqlDataReader, CancellationToken, Task<object>> map,
+        IReplicationDataMapper dataMapper,
         [EnumeratorCancellation] CancellationToken ct)
     {
         await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.RepeatableRead, ct);
@@ -52,7 +53,7 @@ public static class Run
 
         while (await reader.ReadAsync(ct))
         {
-            yield return await map(reader, ct);
+            yield return await dataMapper.ReadFromSnapshot(reader, ct);
         }
     }
 }
