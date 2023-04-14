@@ -58,9 +58,9 @@ public class Subscription: ISubscription
         else
         {
             slot = new PgOutputReplicationSlot(new ReplicationSlotOptions(slotName, created.LogSequenceNumber));
-            await foreach (var @event in ReadExistingRowsFromSnapshot(created.SnapshotName, options, ct))
+            await foreach (var message in ReadExistingRowsFromSnapshot(created.SnapshotName, options, ct))
             {
-                yield return @event;
+                yield return message;
             }
         }
 
