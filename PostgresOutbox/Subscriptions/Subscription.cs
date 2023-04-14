@@ -3,6 +3,7 @@ using Npgsql;
 using Npgsql.Replication;
 using Npgsql.Replication.PgOutput;
 using Npgsql.Replication.PgOutput.Messages;
+using NpgsqlTypes;
 using PostgresOutbox.Subscriptions.Management;
 using PostgresOutbox.Subscriptions.Replication;
 using PostgresOutbox.Subscriptions.ReplicationMessageHandlers;
@@ -23,8 +24,16 @@ public record SubscriptionOptions(
     string SlotName,
     string PublicationName,
     string TableName,
-    IReplicationDataMapper DataMapper
+    IReplicationDataMapper DataMapper,
+    CreateStyle CreateStyle = CreateStyle.WhenNotExists
 );
+
+public enum CreateStyle
+{
+    WhenNotExists,
+    AlwaysRecreate,
+    Never
+}
 
 public class Subscription: ISubscription
 {
@@ -33,28 +42,36 @@ public class Subscription: ISubscription
         [EnumeratorCancellation] CancellationToken ct = default
     )
     {
-        var (connectionString, slotName, publicationName, _, _) = options;
+        var (connectionString, slotName, publicationName, _, _, _) = options;
+
         await using var conn = new LogicalReplicationConnection(connectionString);
         await conn.Open(ct);
 
         var result = await CreateSubscription(conn, options, ct);
 
-        if (result is Created created)
+        PgOutputReplicationSlot slot;
+
+        if (result is not Created created)
         {
+            slot = new PgOutputReplicationSlot(slotName);
+        }
+        else
+        {
+            slot = new PgOutputReplicationSlot(new ReplicationSlotOptions(slotName, created.LogSequenceNumber));
             await foreach (var @event in ReadExistingRowsFromSnapshot(created.SnapshotName, options, ct))
             {
                 yield return @event;
             }
         }
 
-        var slot = new PgOutputReplicationSlot(slotName);
-
-        await foreach (var message in conn.StartReplication(slot, new PgOutputReplicationOptions(publicationName, 1),
-                           ct))
+        var cancellationTokenSource = new CancellationTokenSource();
+        await foreach (var message in
+                       conn.StartReplication(slot, new PgOutputReplicationOptions(publicationName, 1),
+                           cancellationTokenSource.Token))
         {
             if (message is InsertMessage insertMessage)
             {
-                yield return await InsertMessageHandler.Handle(insertMessage, ct);
+                yield return await InsertMessageHandler.Handle(insertMessage, options.DataMapper, ct);
             }
 
             // Always call SetReplicationStatus() or assign LastAppliedLsn and LastFlushedLsn individually
@@ -73,7 +90,8 @@ public class Subscription: ISubscription
         await using var connection = new NpgsqlConnection(options.ConnectionString);
         await connection.OpenAsync(ct);
 
-        await foreach (var row in connection.GetRowsFromSnapshot(snapshotName, options.TableName, options.DataMapper, ct))
+        await foreach (var row in connection.GetRowsFromSnapshot(snapshotName, options.TableName, options.DataMapper,
+                           ct))
         {
             yield return row;
         }
