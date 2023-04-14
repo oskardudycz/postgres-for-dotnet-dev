@@ -15,6 +15,20 @@ NpgsqlConnection.GlobalTypeMapper.UseNetTopologySuite(geographyAsDefault: true);
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Add CORS services
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("ClientPermission", policy =>
+    {
+        policy
+            .WithOrigins("http://localhost:3000")
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .AllowCredentials();
+    });
+});
+
+
 void Configure(JsonSerializerOptions serializerOptions)
 {
     serializerOptions.WriteIndented = true;
@@ -58,12 +72,17 @@ builder.Services.AddSignalR();
 
 var app = builder.Build();
 
+app.UseCors("ClientPermission");
+app.UseAuthorization();
+
+app.UseRouting();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger()
         .UseSwaggerUI();
 }
 
-app.MapHub<FleetManagementHub>("/fleet-management-hub");
+app.MapHub<FleetManagementHub>("/hubs/fleet-management");
 
 app.Run();

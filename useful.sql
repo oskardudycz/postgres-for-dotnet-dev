@@ -17,7 +17,7 @@ SELECT * FROM pg_stat_subscription;
 
 BEGIN ;
 insert into fuel_efficiency_alerts (vehicle_id, start_time, end_time, fuel_efficiency)
-values (11345,'2023-04-14 19:27:19.000000','2023-04-14 19:27:29.000000','3.00');
+values (11341,current_timestamp,current_timestamp,'3.00');
 COMMIT;
 
 SELECT * FROM fuel_efficiency_alerts;
