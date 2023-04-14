@@ -316,13 +316,19 @@ var cancellationTokenSource = new CancellationTokenSource();
 
 var ct = cancellationTokenSource.Token;
 
-const string slotName = "trips_slot";
+const string slotName = "fuel_efficiency_alerts_slot";
 
-var dataMapper = new FlatObjectMapper<TripRecord>(NameTransformations.FromPostgres);
+var dataMapper = new FlatObjectMapper<FuelEfficiencyAlerts>(NameTransformations.FromPostgres);
 
 var subscriptionOptions =
-    new SubscriptionOptions(Settings.ConnectionString, slotName, "fuel_efficiency_alerts_pub", "fuel_efficiency_alerts",
-        dataMapper, CreateStyle.WhenNotExists);
+    new SubscriptionOptions(
+        Settings.ConnectionString,
+        slotName,
+        "fuel_efficiency_alerts_pub",
+        "fuel_efficiency_alerts",
+        dataMapper,
+        CreateStyle.AlwaysRecreate
+    );
 var subscription = new Subscription();
 
 await foreach (var readEvent in subscription.Subscribe(subscriptionOptions, ct: ct))

@@ -20,6 +20,8 @@ insert into fuel_efficiency_alerts (vehicle_id, start_time, end_time, fuel_effic
 values (11345,'2023-04-14 19:27:19.000000','2023-04-14 19:27:29.000000','3.00');
 COMMIT;
 
+SELECT * FROM fuel_efficiency_alerts;
+
 CREATE TABLE fuel_efficiency_alerts (
      vehicle_id INT NOT NULL,
      start_time TIMESTAMP NOT NULL,
