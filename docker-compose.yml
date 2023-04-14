@@ -1,10 +1,21 @@
 version: '3.8'
 services:
-    timescaledb:
-        image: timescale/timescaledb-ha:pg15-latest
+    postgres:
+        image: postgres-with-timescaledb-and-postgis
+        build:
+            dockerfile: Dockerfile
         ports:
             - "5432:5432"
         environment:
+            - POSTGRES_DB=postgres
             - POSTGRES_PASSWORD=postgres
-            - WAL_LEVEL=logical
-        command: postgres -c wal_level=logical
+        command:
+            - "postgres"
+            - "-c"
+            - "wal_level=logical"
+        volumes:
+            - postgres_data:/var/lib/postgresql/data
+
+volumes:
+    postgres_data:
+

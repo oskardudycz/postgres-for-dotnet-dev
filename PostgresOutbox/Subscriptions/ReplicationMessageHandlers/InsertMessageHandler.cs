@@ -10,5 +10,5 @@ public static class InsertMessageHandler
         IReplicationDataMapper dataMapper,
         CancellationToken ct
     ) =>
-        await dataMapper.ReadFromReplication(message.NewRow, ct);
+        await dataMapper.ReadFromReplication(message, ct);
 }

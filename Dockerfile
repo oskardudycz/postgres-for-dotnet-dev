@@ -10,6 +10,6 @@ RUN apt update
 
 RUN apt install -y timescaledb-2-postgresql-15
 
-RUN timescaledb-tune --quiet --yes --dry-run > /var/lib/postgresql/data/postgresql.conf
+# RUN timescaledb-tune --quiet --yes --dry-run > /var/lib/postgresql/data/postgresql.conf
 
 COPY updateConfig.sh      /docker-entrypoint-initdb.d/_updateConfig.sh

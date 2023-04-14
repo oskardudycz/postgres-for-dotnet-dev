@@ -17,15 +17,12 @@ NpgsqlConnection.GlobalTypeMapper.UseNetTopologySuite(geographyAsDefault: true);
 
 await using var connection = new NpgsqlConnection(Settings.ConnectionString);
 
-const bool shouldSetup = false;
+connection.Run("CREATE EXTENSION IF NOT EXISTS timescaledb;");
 
-if (shouldSetup)
-#pragma warning disable CS0162
-{
 /////////////////////////////
 // 1. Trips
 /////////////////////////////
-    connection.Run(@"
+connection.Run(@"
     DROP TABLE IF EXISTS trips CASCADE;
     CREATE TABLE trips (
         trip_time TIMESTAMP NOT NULL,
@@ -53,14 +50,14 @@ if (shouldSetup)
 ");
 
 // Find the total distance traveled and fuel used for each vehicle:
-    await connection.PrintAsync(@"
+await connection.PrintAsync(@"
     SELECT vehicle_id, SUM(distance_miles) AS total_distance, SUM(fuel_used_gallons) AS total_fuel
     FROM trips
     GROUP BY vehicle_id;
 ");
 
 // Find the average distance and fuel efficiency for each driver:
-    await connection.PrintAsync(@"
+await connection.PrintAsync(@"
     SELECT driver_name, AVG(distance_miles) AS avg_distance, SUM(distance_miles)/SUM(fuel_used_gallons) AS fuel_efficiency
     FROM trips
     GROUP BY driver_name;
@@ -71,8 +68,8 @@ if (shouldSetup)
 ////////////////////////////////////////////////////
 
 // Calculate the average fuel efficiency for each vehicle over a rolling window of 30 days
-    connection.Run("DROP MATERIALIZED VIEW IF EXISTS vehicle_fuel_efficiency_avg;");
-    connection.Run(@"
+connection.Run("DROP MATERIALIZED VIEW IF EXISTS vehicle_fuel_efficiency_avg;");
+connection.Run(@"
     CREATE MATERIALIZED VIEW vehicle_fuel_efficiency_avg
     WITH (timescaledb.continuous) AS
     SELECT time_bucket('1 day', trip_time) AS bucket,
@@ -82,14 +79,14 @@ if (shouldSetup)
     WHERE trip_time >= now() - INTERVAL '30 days'
     GROUP BY bucket, vehicle_id;
 ");
-    connection.Run(@"
+connection.Run(@"
     SELECT add_continuous_aggregate_policy(
       continuous_aggregate => 'vehicle_fuel_efficiency_avg',
       start_offset => INTERVAL '3 days',
       end_offset => INTERVAL '1 second',
       schedule_interval => INTERVAL '1 day');
 ");
-    connection.Run(@"
+connection.Run(@"
     CALL refresh_continuous_aggregate(
         continuous_aggregate => 'vehicle_fuel_efficiency_avg',
         window_start => (now() - INTERVAL '1 week')::TIMESTAMP,
@@ -98,7 +95,7 @@ if (shouldSetup)
 ");
 
 // Create a table to store alerts for vehicles with low fuel efficiency
-    connection.Run(@"
+connection.Run(@"
     DROP TABLE IF EXISTS fuel_efficiency_alerts;
     CREATE TABLE fuel_efficiency_alerts (
         vehicle_id INT NOT NULL,
@@ -110,7 +107,7 @@ if (shouldSetup)
 ");
 
 // Create a table to store alerts for vehicles with low fuel efficiency
-    connection.Run(@"
+connection.Run(@"
     CREATE OR REPLACE FUNCTION check_fuel_efficiency_and_insert_alerts(p_job_id INTEGER, p_config JSONB)
     RETURNS VOID AS $$
     BEGIN
@@ -152,7 +149,7 @@ if (shouldSetup)
 
 ");
 
-    connection.Run(@"
+connection.Run(@"
     CREATE OR REPLACE FUNCTION remove_job_if_exists(p_function_name TEXT)
     RETURNS VOID AS $$
     DECLARE
@@ -173,10 +170,10 @@ if (shouldSetup)
     SELECT add_job('check_fuel_efficiency_and_insert_alerts', '1 second');
 ");
 
-    await Task.Delay(TimeSpan.FromSeconds(2));
+await Task.Delay(TimeSpan.FromSeconds(2));
 
 // Generate a report that shows the fuel efficiency for each vehicle over time, as well as any alerts that have been generated
-    await connection.PrintAsync(@"
+await connection.PrintAsync(@"
     SELECT trips.vehicle_id,
            trips.trip_time,
            trips.distance_miles/trips.fuel_used_gallons AS fuel_efficiency,
@@ -194,9 +191,9 @@ if (shouldSetup)
 // 3. Let's add PostGis
 ////////////////////////////////////////////////////
 
-    connection.Run(@"CREATE EXTENSION IF NOT EXISTS postgis;");
+connection.Run(@"CREATE EXTENSION IF NOT EXISTS postgis;");
 
-    connection.Run(@"
+connection.Run(@"
     ALTER TABLE trips
     ADD COLUMN route GEOMETRY(LINESTRING, 4326) NULL;
 
@@ -222,9 +219,9 @@ if (shouldSetup)
     ALTER COLUMN route SET NOT NULL;
 ");
 
-    connection.Run("DROP MATERIALIZED VIEW IF EXISTS vehicle_fuel_efficiency_avg;");
+connection.Run("DROP MATERIALIZED VIEW IF EXISTS vehicle_fuel_efficiency_avg;");
 
-    connection.Run(@"
+connection.Run(@"
     ALTER TABLE trips
         DROP COLUMN distance_miles,
         ADD COLUMN distance_miles NUMERIC(10, 2) GENERATED ALWAYS AS (
@@ -232,7 +229,7 @@ if (shouldSetup)
         ) STORED;
 ");
 
-    connection.Run(@"
+connection.Run(@"
     ALTER TABLE trips
         DROP COLUMN start_location,
         ADD COLUMN start_location GEOMETRY(POINT, 4326) GENERATED ALWAYS AS (
@@ -240,7 +237,7 @@ if (shouldSetup)
         ) STORED;
 ");
 
-    connection.Run(@"
+connection.Run(@"
     ALTER TABLE trips
         DROP COLUMN end_location,
         ADD COLUMN end_location GEOMETRY(POINT, 4326) GENERATED ALWAYS AS (
@@ -248,7 +245,7 @@ if (shouldSetup)
         ) STORED;
 ");
 
-    connection.Run(@"
+connection.Run(@"
     CREATE MATERIALIZED VIEW vehicle_fuel_efficiency_avg
     WITH (timescaledb.continuous) AS
     SELECT time_bucket('1 day', trip_time) AS bucket,
@@ -258,7 +255,7 @@ if (shouldSetup)
     WHERE trip_time >= now() - INTERVAL '30 days'
     GROUP BY bucket, vehicle_id;
 ");
-    connection.Run(@"
+connection.Run(@"
     CALL refresh_continuous_aggregate(
         continuous_aggregate => 'vehicle_fuel_efficiency_avg',
         window_start => (now() - INTERVAL '1 week')::TIMESTAMP,
@@ -280,13 +277,13 @@ if (shouldSetup)
 //     PRIMARY KEY (trip_time, vehicle_id)
 // );
 
-    connection.Run(@"
+connection.Run(@"
     INSERT INTO trips (trip_time, vehicle_id, driver_name, route, fuel_used_gallons)
     VALUES
     ('2023-04-12 14:30:01', 12345, 'John Doe', 'SRID=4326;LINESTRING(-74.0060 40.7128, -73.9352 40.7306, -73.8701 40.6655)',  2.5);
 ");
 
-    await connection.PrintAsync(@"
+await connection.PrintAsync(@"
     SELECT trips.vehicle_id,
            trips.trip_time,
            trips.distance_miles/trips.fuel_used_gallons AS fuel_efficiency,
@@ -300,13 +297,11 @@ if (shouldSetup)
     ORDER BY trips.vehicle_id, trips.trip_time;
 ");
 
-    await connection.PrintAsync(@"
+await connection.PrintAsync(@"
     SELECT column_name, CASE WHEN data_type = 'USER-DEFINED' THEN udt_name ELSE data_type END as data_type,  is_nullable, udt_name, generation_expression
     FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = 'trips';
 ");
-}
-#pragma warning restore CS0162
 
 var serializerOptions = new JsonSerializerOptions
 {
@@ -345,4 +340,11 @@ record TripRecord(
     decimal? DistanceMiles,
     Geometry? StartLocation,
     Geometry? EndLocation
+);
+
+record FuelEfficiencyAlerts(
+    int VehicleId,
+    DateTime StartTime,
+    DateTime EndTime,
+    decimal FuelEfficiency
 );
