@@ -1,8 +1,9 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using PostgresOutbox.Subscriptions;
 using PostgresOutbox.Subscriptions.Replication;
+using static PostgresForDotnetDev.Api.FleetManagement.FleetManagementHub;
 
-namespace PostgresForDotnetDev.Api;
+namespace PostgresForDotnetDev.Api.FleetManagement;
 
 public class FuelEfficiencyAlertsPostgresSubscription
 {
@@ -29,7 +30,7 @@ public class FuelEfficiencyAlertsPostgresSubscription
 
         await foreach (var alert in subscription.Subscribe(subscriptionOptions, ct: ct))
         {
-           await FleetManagementHub.SendFuelEfficiencyAlert(hubContext, (FuelEfficiencyAlert) alert);
+           await SendFuelEfficiencyAlert(hubContext, (FuelEfficiencyAlert) alert);
         }
     }
 }

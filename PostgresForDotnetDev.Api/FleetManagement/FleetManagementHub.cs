@@ -1,6 +1,6 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 
-namespace PostgresForDotnetDev.Api;
+namespace PostgresForDotnetDev.Api.FleetManagement;
 
 public class FleetManagementHub : Hub
 {

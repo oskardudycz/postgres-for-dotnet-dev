@@ -4,9 +4,11 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.SignalR;
 using NetTopologySuite.IO.Converters;
 using Npgsql;
-using PostgresForDotnetDev.Api;
 using PostgresForDotnetDev.Api.Core;
+using PostgresForDotnetDev.Api.FleetManagement;
 using JsonOptions = Microsoft.AspNetCore.Http.Json.JsonOptions;
+
+using static PostgresForDotnetDev.Api.FleetManagement.FuelEfficiencyAlertsPostgresSubscription;
 
 #pragma warning disable CS0618
 NpgsqlConnection.GlobalTypeMapper.UseNetTopologySuite(geographyAsDefault: true);
@@ -48,7 +50,6 @@ builder.Services.Configure<JsonOptions>(o => Configure(o.SerializerOptions));
 builder.Services.Configure<Microsoft.AspNetCore.Mvc.JsonOptions>(o => Configure(o.JsonSerializerOptions));
 
 // Add Postgres Subscription
-
 builder.Services.AddHostedService(serviceProvider =>
     {
         var logger =
@@ -56,9 +57,8 @@ builder.Services.AddHostedService(serviceProvider =>
         var hubContext =
             serviceProvider.GetRequiredService<IHubContext<FleetManagementHub>>();
 
-        return new BackgroundWorker(
-            logger,
-            ct => FuelEfficiencyAlertsPostgresSubscription.SubscribeAsync(
+        return new BackgroundWorker(logger, ct =>
+            SubscribeAsync(
                 builder.Configuration.GetConnectionString("Postgres")!,
                 hubContext,
                 ct
