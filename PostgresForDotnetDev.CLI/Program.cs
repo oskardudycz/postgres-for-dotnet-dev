@@ -4,8 +4,6 @@ using PostgresForDotnetDev.Core;
 
 await using var connection = new NpgsqlConnection(Settings.ConnectionString);
 
-connection.Run("CREATE EXTENSION IF NOT EXISTS timescaledb;");
-
 /////////////////////////////
 // 1. Trips
 /////////////////////////////
@@ -23,9 +21,12 @@ connection.Run(@"
     );
 ");
 
+connection.Run("CREATE EXTENSION IF NOT EXISTS timescaledb;");
+
 connection.Run(@"
     SELECT create_hypertable('trips', 'trip_time');
-
+");
+connection.Run(@"
     INSERT INTO trips (trip_time, vehicle_id, driver_name, start_location, end_location, distance_kilometers, fuel_used_liters)
     VALUES
     ('2023-04-03 08:00:00', 1, 'John Doe', '52.292064, 21.036320', '52.156574, 19.133474', 200, 10),
@@ -40,14 +41,20 @@ connection.Run(@"
 
 // Find the total distance traveled and fuel used for each vehicle:
 await connection.PrintAsync(@"
-    SELECT vehicle_id, SUM(distance_kilometers) AS total_distance, SUM(fuel_used_liters) AS total_fuel
+    SELECT
+        vehicle_id,
+        SUM(distance_kilometers) AS total_distance,
+        SUM(fuel_used_liters) AS total_fuel
     FROM trips
     GROUP BY vehicle_id;
 ");
 
 // Find the average distance and fuel efficiency for each driver:
 await connection.PrintAsync(@"
-    SELECT driver_name, AVG(distance_kilometers) AS avg_distance, SUM(distance_kilometers)/SUM(fuel_used_liters) AS fuel_efficiency
+    SELECT
+        driver_name,
+        AVG(distance_kilometers) AS avg_distance,
+        SUM(distance_kilometers)/SUM(fuel_used_liters) AS fuel_efficiency
     FROM trips
     GROUP BY driver_name;
 ");
@@ -166,7 +173,7 @@ await Task.Delay(TimeSpan.FromSeconds(2));
 await connection.PrintAsync(@"
     SELECT trips.vehicle_id,
            trips.trip_time,
-           trips.distance_kilometers/trips.fuel_used_liters AS fuel_efficiency,
+           fuel_efficiency_alerts.fuel_efficiency,
            fuel_efficiency_alerts.start_time,
            fuel_efficiency_alerts.end_time
     FROM trips
