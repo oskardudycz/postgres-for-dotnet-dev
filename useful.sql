@@ -26,10 +26,13 @@ WHERE name = 'max_logical_replication_workers';
 SELECT * FROM pg_replication_slots;
 SELECT * FROM pg_stat_replication;
 
-BEGIN ;
+SELECT * FROM pg_publication WHERE pubname = 'fuel_efficiency_alerts_pub';
+
+
+
 insert into fuel_efficiency_alerts (vehicle_id, start_time, end_time, fuel_efficiency)
-values (cast(extract(epoch from current_timestamp) as INTEGER),current_TIMESTAMPTZ,current_TIMESTAMPTZ,'3.00');
-COMMIT;
+values (cast(extract(epoch from current_timestamp) as INTEGER),current_timestamp,current_timestamp,'3.00');
+
 
 SELECT * FROM fuel_efficiency_alerts;
 
