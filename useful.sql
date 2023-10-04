@@ -12,7 +12,7 @@ CREATE TABLE fuel_efficiency_alerts (
 ---------------------------
 INSERT INTO trips (trip_time, vehicle_id, driver_name, route, fuel_used_liters)
 VALUES
-    ('2023-04-11 14:33:00', 12346, 'John Doe', 'SRID=4326;LINESTRING(-74.0060 40.7128, -73.9352 40.7306, -73.8701 40.6655)',  12);
+    ((NOW() - interval '1 days'), cast(extract(epoch from current_timestamp) as INTEGER), 'John Doe', 'SRID=4326;LINESTRING(-74.0060 40.7128, -73.9352 40.7306, -73.8701 40.6655)',  5.5);
 select * from trips;
 SELECT * FROM fuel_efficiency_alerts;
 
@@ -28,7 +28,7 @@ SELECT * FROM pg_stat_replication;
 
 BEGIN ;
 insert into fuel_efficiency_alerts (vehicle_id, start_time, end_time, fuel_efficiency)
-values (11341,current_TIMESTAMPTZ,current_TIMESTAMPTZ,'3.00');
+values (cast(extract(epoch from current_timestamp) as INTEGER),current_TIMESTAMPTZ,current_TIMESTAMPTZ,'3.00');
 COMMIT;
 
 SELECT * FROM fuel_efficiency_alerts;

@@ -29,14 +29,14 @@ connection.Run(@"
 connection.Run(@"
     INSERT INTO trips (trip_time, vehicle_id, driver_name, start_location, end_location, distance_kilometers, fuel_used_liters)
     VALUES
-    ('2023-04-03 08:00:00', 1, 'John Doe', '52.292064, 21.036320', '52.156574, 19.133474', 200, 10),
-    ('2023-04-03 10:00:00', 1, 'Jane Smith', '52.156574, 19.133474', '52.292064, 21.036320', 200, 10),
-    ('2023-04-04 08:00:00', 2, 'John Doe', '52.156574, 19.133474', '50.890716, 21.951678', 100, 5),
-    ('2023-04-04 10:00:00', 2, 'Jane Smith', '50.890716, 21.951678', '52.156574, 19.133474', 100, 5),
-    ('2023-04-05 08:00:00', 3, 'Jane Doe', '52.156574, 19.133474', '52.223045, 20.971662', 1, 40),
-    ('2023-04-05 10:00:00', 3, 'Jane Doe', '52.223045, 20.971662', '52.156574, 19.133474', 1, 40),
-    ('2023-04-06 08:00:00', 4, 'John Smith', '52.156574, 19.133474', '52.223045, 20.971662', 1, 60),
-    ('2023-04-06 10:00:00', 4, 'John Smith', '52.223045, 20.971662', '52.156574, 19.133474', 1, 60);
+    ((NOW() - interval '6 days 2 hours'), 1, 'John Doe',   '52.292064, 21.036320', '52.156574, 19.133474', 200, 10),
+    ((NOW() - interval '6 days'),         1, 'Jane Smith', '52.156574, 19.133474', '52.292064, 21.036320', 200, 10),
+    ((NOW() - interval '5 days 2 hours'), 2, 'John Doe',   '52.156574, 19.133474', '50.890716, 21.951678', 100, 5),
+    ((NOW() - interval '5 days'),         2, 'Jane Smith', '50.890716, 21.951678', '52.156574, 19.133474', 100, 5),
+    ((NOW() - interval '4 days 2 hours'), 3, 'Jane Doe',   '52.156574, 19.133474', '52.223045, 20.971662', 1,   40),
+    ((NOW() - interval '4 days'),         3, 'Jane Doe',   '52.223045, 20.971662', '52.156574, 19.133474', 1,   40),
+    ((NOW() - interval '3 days 2 hours'), 4, 'John Smith', '52.156574, 19.133474', '52.223045, 20.971662', 1,   60),
+    ((NOW() - interval '3 days'),         4, 'John Smith', '52.223045, 20.971662', '52.156574, 19.133474', 1,   60);
 ");
 
 // Find the total distance traveled and fuel used for each vehicle:
@@ -106,6 +106,8 @@ connection.Run(@"
 connection.Run(@"
     CREATE OR REPLACE FUNCTION check_fuel_efficiency_and_insert_alerts(p_job_id INTEGER, p_config JSONB)
     RETURNS VOID AS $$
+    DECLARE
+        MIN_EFFICIENCY_FACTOR INTEGER := 5;
     BEGIN
       INSERT INTO
         fuel_efficiency_alerts (
@@ -122,7 +124,7 @@ connection.Run(@"
       FROM
         vehicle_fuel_efficiency_avg
       WHERE
-        fuel_efficiency_avg < 5
+        fuel_efficiency_avg < MIN_EFFICIENCY_FACTOR
         AND bucket >= now() - INTERVAL '30 days'
       ON CONFLICT (vehicle_id, start_time) DO UPDATE
         SET
@@ -140,7 +142,7 @@ connection.Run(@"
             a.vehicle_id = f.vehicle_id
             AND f.bucket >= now() - INTERVAL '30 days'
             AND a.start_time = f.bucket
-            AND f.fuel_efficiency_avg < 5
+            AND f.fuel_efficiency_avg < MIN_EFFICIENCY_FACTOR
         );
     END;
     $$ LANGUAGE plpgsql;
@@ -278,13 +280,18 @@ connection.Run(@"
 connection.Run(@"
     INSERT INTO trips (trip_time, vehicle_id, driver_name, route, fuel_used_liters)
     VALUES
-    ('2023-04-12 14:30:01', 12345, 'John Doe', 'SRID=4326;LINESTRING(-74.0060 40.7128, -73.9352 40.7306, -73.8701 40.6655)',  2.5);
+    ((NOW() - interval '1 days'), 12345, 'John Doe', 'SRID=4326;LINESTRING(-74.0060 40.7128, -73.9352 40.7306, -73.8701 40.6655)',  5.5);
 ");
 
+// Let job to refresh the view
+await Task.Delay(TimeSpan.FromSeconds(1));
+
 await connection.PrintAsync(@"
-    SELECT trips.vehicle_id,
+    SELECT DISTINCT on (trips.vehicle_id) trips.vehicle_id,
            trips.trip_time,
            trips.distance_kilometers/trips.fuel_used_liters AS fuel_efficiency,
+           CASE WHEN fuel_efficiency_alerts.start_time IS NOT NULL
+                THEN TRUE ELSE FALSE END AS has_alert,
            fuel_efficiency_alerts.start_time,
            fuel_efficiency_alerts.end_time
     FROM trips
