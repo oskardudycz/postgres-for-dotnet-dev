@@ -29,7 +29,7 @@ public class FuelEfficiencyAlertsPostgresSubscription
             ),
             new ReplicationSlotManagement.ReplicationSlotSetupOptions(
                 slotName,
-                createStyle
+                CreateStyle.AlwaysRecreate
             ),
             dataMapper
         );
