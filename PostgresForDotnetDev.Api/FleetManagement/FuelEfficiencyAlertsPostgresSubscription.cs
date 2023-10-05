@@ -15,7 +15,6 @@ public class FuelEfficiencyAlertsPostgresSubscription
     )
     {
         const string slotName = "fuel_efficiency_alerts_slot";
-        var createStyle = CreateStyle.WhenNotExists;
 
         var dataMapper = new FlatObjectMapper<FuelEfficiencyAlert>(NameTransformations.FromPostgres);
 
@@ -24,12 +23,12 @@ public class FuelEfficiencyAlertsPostgresSubscription
             new PublicationManagement.PublicationSetupOptions(
                 "fuel_efficiency_alerts_pub",
                 "fuel_efficiency_alerts",
-                createStyle,
+                CreateStyle.AlwaysRecreate,
                 true
             ),
             new ReplicationSlotManagement.ReplicationSlotSetupOptions(
                 slotName,
-                createStyle
+                CreateStyle.AlwaysRecreate
             ),
             dataMapper
         );
