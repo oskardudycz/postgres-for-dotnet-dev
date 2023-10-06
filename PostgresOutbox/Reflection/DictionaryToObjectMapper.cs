@@ -1,4 +1,6 @@
-﻿namespace PostgresOutbox.Reflection;
+﻿using System.Globalization;
+
+namespace PostgresOutbox.Reflection;
 
 public static class DictionaryToObjectMapper
 {
@@ -18,7 +20,7 @@ public static class DictionaryToObjectMapper
             var targetType =  Nullable.GetUnderlyingType(property.PropertyType) ?? property.PropertyType;;
 
             var value = kvp.Value is IConvertible && kvp.GetType() != property.PropertyType
-                ? Convert.ChangeType(kvp.Value, targetType)
+                ? Convert.ChangeType(kvp.Value, targetType, CultureInfo.InvariantCulture)
                 : kvp.Value;
 
             property.SetValue(obj, value);
