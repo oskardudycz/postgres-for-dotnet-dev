@@ -80,7 +80,7 @@ connection.Run(@"
       continuous_aggregate => 'vehicle_fuel_efficiency_avg',
       start_offset => INTERVAL '3 days',
       end_offset => INTERVAL '1 second',
-      schedule_interval => INTERVAL '1 day');
+      schedule_interval => INTERVAL '1 second'); --on prod should be 1 day
 ");
 connection.Run(@"
     CALL refresh_continuous_aggregate(
@@ -256,6 +256,13 @@ connection.Run(@"
     GROUP BY bucket, vehicle_id;
 ");
 connection.Run(@"
+    SELECT add_continuous_aggregate_policy(
+      continuous_aggregate => 'vehicle_fuel_efficiency_avg',
+      start_offset => INTERVAL '3 days',
+      end_offset => INTERVAL '1 second',
+      schedule_interval => INTERVAL '1 second'); --on prod should be 1 day
+");
+connection.Run(@"
     CALL refresh_continuous_aggregate(
         continuous_aggregate => 'vehicle_fuel_efficiency_avg',
         window_start => (now() - INTERVAL '1 week')::TIMESTAMPTZ,
@@ -277,11 +284,11 @@ connection.Run(@"
 //     PRIMARY KEY (trip_time, vehicle_id)
 // );
 
-connection.Run(@"
-    INSERT INTO trips (trip_time, vehicle_id, driver_name, route, fuel_used_liters)
-    VALUES
-    ((NOW() - interval '1 days'), 12345, 'John Doe', 'SRID=4326;LINESTRING(-74.0060 40.7128, -73.9352 40.7306, -73.8701 40.6655)',  5.5);
-");
+// connection.Run(@"
+//     INSERT INTO trips (trip_time, vehicle_id, driver_name, route, fuel_used_liters)
+//     VALUES
+//     ((NOW() - interval '1 days'), 12345, 'John Doe', 'SRID=4326;LINESTRING(-74.0060 40.7128, -73.9352 40.7306, -73.8701 40.6655)',  5.5);
+// ");
 
 // Let job to refresh the view
 await Task.Delay(TimeSpan.FromSeconds(1));

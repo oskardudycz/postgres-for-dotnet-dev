@@ -58,3 +58,10 @@ WHERE s.total_runs > 0;
 SELECT
     *
 FROM timescaledb_information.hypertables;
+
+
+--------------------------
+-- list continuous aggregates policies
+---------------------------
+SELECT *
+FROM timescaledb_experimental.policies;

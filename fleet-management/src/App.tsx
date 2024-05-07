@@ -50,6 +50,7 @@ function FleetManagementApp() {
               className="bg-white rounded-lg shadow p-4"
             >
               <div className="text-lg font-bold mb-2">
+                <img src="alert.gif" alt="alert" />
                 Alert for Vehicle {alert.vehicleId}
               </div>
               <div className="text-sm mb-2">
