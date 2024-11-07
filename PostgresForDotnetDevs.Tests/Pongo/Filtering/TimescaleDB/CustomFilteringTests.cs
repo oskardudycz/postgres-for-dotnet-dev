@@ -52,7 +52,7 @@ public class CustomExpressionVisitorTests
         var visitor = new QueryExpressionVisitor("my_table", new TimeScaleOperatorVisitor());
         var result = visitor.Visit(filter) as LambdaExpression;
         var sqlExpression = result?.Body as SqlExpression;
-        Assert.Equal("date_trunc('day', my_table.\"data\"->>'CreatedAt') = '2023-01-01T00:00:00+01:00'",
+        Assert.Equal("date_trunc('day', my_table.\"data\"->>'CreatedAt') = '2023-01-01T00:00:00Z'",
             sqlExpression?.ToString());
     }
 
